@@ -29,6 +29,27 @@ one 15 m radius circle at 30 m, return to launch and land.
 All values are in `results/comparison.json`; the chart is `results/comparison.png`; the data extracted from
 the ArduPilot log (10 Hz) is `results/ardupilot_extracted.csv`.
 
+## Stability (`stability.py`)
+
+| | ArduCopter PID | Network, quad | Network, hexa |
+|---|---|---|---|
+| Hover roll / pitch wobble (std) | 0.12 / 0.13 deg | 0.19 / 0.26 deg | 0.38 / 0.34 deg |
+| Heading swing during climb-out, peak to peak | 0.3 deg | 12.7 deg | 7.2 deg |
+| Gust 0 to 8 m/s: pushed off position, peak | 0.50 m | 0.57 m | 0.17 m |
+| Gust: time to get back within 0.3 m | 4.4 s | 3.7 s | never left 0.3 m |
+| Gust: height change, peak | 0.02 m | 0.19 m | 0.06 m |
+| Gust: tilt needed to hold against it | 10.9 deg | 7.9 deg | 7.9 deg |
+
+All three stayed stable through the gust and none crashed. The gust pushed harder on ArduPilot's simulated
+airframe (it needed 10.9 deg of tilt to hold, ours 7.9 deg), so its 0.50 m is against a stronger push.
+
+Extra control delay the networks tolerate (network only, not measured for ArduPilot): both fly normally with
+24 ms of added delay between network output and motors; the quad crashes at 36 ms and the hexa at 48 ms.
+That is a thin margin for real hardware.
+
+The hover heading figure in `results/stability.json` is not comparable: ArduPilot was still turning to its
+commanded heading during the hold.
+
 ## Reading it fairly
 
 - **Two different simulators.** ArduPilot flew in SITL's physics and sensor models; the networks flew in

@@ -1,0 +1,100 @@
+{
+ "A_attitude_steadiness": {
+  "ArduCopter 4.7.2 (PID)": {
+   "hover roll wobble, std (deg)": 0.12142623833467275,
+   "hover pitch wobble, std (deg)": 0.13013764791809074,
+   "hover heading wobble, std (deg)": 3.0879501973207404,
+   "climb-out heading swing, peak to peak (deg)": 0.3196692243218422,
+   "climb-out roll and pitch wobble, std (deg)": 0.492984046959526
+  },
+  "Neural network, quad": {
+   "hover roll wobble, std (deg)": 0.18631268722518854,
+   "hover pitch wobble, std (deg)": 0.25944753565970236,
+   "hover heading wobble, std (deg)": 0.32184545428694483,
+   "climb-out heading swing, peak to peak (deg)": 12.669681243518635,
+   "climb-out roll and pitch wobble, std (deg)": 1.145527670761151
+  },
+  "Neural network, hexa": {
+   "hover roll wobble, std (deg)": 0.3787310926331183,
+   "hover pitch wobble, std (deg)": 0.3442057584615575,
+   "hover heading wobble, std (deg)": 0.6268316851309147,
+   "climb-out heading swing, peak to peak (deg)": 7.163716524308214,
+   "climb-out roll and pitch wobble, std (deg)": 1.892822449240322
+  }
+ },
+ "B_gust_0_to_8_mps": {
+  "ArduCopter 4.7.2 (PID)": {
+   "pushed off position by, peak (m)": 0.497,
+   "time to get back within 0.3 m while the gust blows (s)": 4.352,
+   "offset still held at the end of the gust (m)": 0.013,
+   "tilt needed to hold against the gust (deg)": 10.9,
+   "steepest tilt during the gust (deg)": 11.88,
+   "height change, peak (m)": 0.019,
+   "swing when the gust stops, peak (m)": 0.537,
+   "time to settle within 0.3 m after the gust stops (s)": 4.092
+  },
+  "Neural network, quad": {
+   "pushed off position by, peak (m)": 0.566,
+   "time to get back within 0.3 m while the gust blows (s)": 3.675,
+   "offset still held at the end of the gust (m)": 0.031,
+   "tilt needed to hold against the gust (deg)": 7.902,
+   "steepest tilt during the gust (deg)": 11.709,
+   "height change, peak (m)": 0.186,
+   "swing when the gust stops, peak (m)": 0.577,
+   "time to settle within 0.3 m after the gust stops (s)": 3.615
+  },
+  "Neural network, hexa": {
+   "pushed off position by, peak (m)": 0.166,
+   "time to get back within 0.3 m while the gust blows (s)": 0.0,
+   "offset still held at the end of the gust (m)": 0.041,
+   "tilt needed to hold against the gust (deg)": 7.886,
+   "steepest tilt during the gust (deg)": 11.094,
+   "height change, peak (m)": 0.062,
+   "swing when the gust stops, peak (m)": 0.125,
+   "time to settle within 0.3 m after the gust stops (s)": 0.0
+  }
+ },
+ "C_network_delay_tolerance": {
+  "quad_x": {
+   "0 ms": {
+    "worst_tilt_deg": 16.1,
+    "final_error_m": 0.02
+   },
+   "12 ms": {
+    "worst_tilt_deg": 16.0,
+    "final_error_m": 0.02
+   },
+   "24 ms": {
+    "worst_tilt_deg": 35.3,
+    "final_error_m": 0.03
+   },
+   "36 ms": "crashed",
+   "48 ms": "crashed",
+   "60 ms": "crashed",
+   "72 ms": "crashed",
+   "96 ms": "crashed"
+  },
+  "hex_x": {
+   "0 ms": {
+    "worst_tilt_deg": 15.3,
+    "final_error_m": 0.01
+   },
+   "12 ms": {
+    "worst_tilt_deg": 15.8,
+    "final_error_m": 0.01
+   },
+   "24 ms": {
+    "worst_tilt_deg": 17.7,
+    "final_error_m": 0.01
+   },
+   "36 ms": {
+    "worst_tilt_deg": 58.2,
+    "final_error_m": 1.01
+   },
+   "48 ms": "crashed",
+   "60 ms": "crashed",
+   "72 ms": "crashed",
+   "96 ms": "crashed"
+  }
+ }
+}
