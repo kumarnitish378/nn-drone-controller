@@ -195,7 +195,17 @@ plt.rcParams.update({"font.size": 10, "axes.edgecolor": "#c9c8c2", "axes.labelco
     "grid.linewidth": 0.6, "figure.facecolor": BG, "axes.facecolor": BG, "axes.titlesize": 11, "axes.titleweight": "bold",
     "axes.titlelocation": "left", "axes.titlecolor": INK})
 rec = nom["rec"]; t = rec["t"] / 60
-fig, ax = plt.subplots(4, 1, figsize=(7, 18), gridspec_kw=dict(height_ratios=[1.3, 1.3, 1, 1]))
+fig, ax0 = plt.subplots(6, 1, figsize=(7, 28), gridspec_kw=dict(height_ratios=[1.6, 1.2, 1.3, 1.3, 1, 1]))
+SEC2 = SEC; p_ = rec["p"]; tg_ = rec["tgt"]
+a = ax0[0]; a.plot(tg_[:, 1], tg_[:, 2], "--", color=SEC, lw=1, label="Planned"); a.plot(p_[:, 1], p_[:, 2], color=C4[0], lw=2, label="Flown")
+for nme, w in [("WP1", WP1), ("WP2", WP2), ("WP3", WP3), ("WP4", WP4), ("WP5", WP5), ("WP6", WP6)]:
+    a.scatter([w[1]], [w[2]], s=45, color=BG, edgecolor=SEC, zorder=3); a.annotate(nme, (w[1], w[2]), textcoords="offset points", xytext=(8, 6), color=SEC)
+a.invert_xaxis(); a.set_xlabel("← left     sideways position (m)     right →"); a.set_ylabel("height (m)")
+a.set_title("Side view: height against sideways position"); a.legend(frameon=False, loc="center left")
+a = ax0[1]; a.plot(tg_[:, 1], tg_[:, 0], "--", color=SEC, lw=1, label="Planned"); a.plot(p_[:, 1], p_[:, 0], color=C4[0], lw=2, label="Flown")
+a.invert_xaxis(); a.set_aspect("equal"); a.set_xlabel("← left     sideways position (m)     right →"); a.set_ylabel("forward (m)")
+a.set_title("Top view: circle at WP5 (left) and rectangle at WP6 (right)"); a.legend(frameon=False, loc="lower center", ncol=2)
+ax = ax0[2:]
 def panel(a, t0, t1, title, marks):
     m = (tf >= t0) & (tf <= t1)
     for i in range(pf.shape[1]): a.plot(tf[m] - t0, pf[m, i], color=C4[i], lw=1.3, label=f"Motor {i+1}")

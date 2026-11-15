@@ -61,6 +61,7 @@ Same test cases, same randomisation. Select the frame with `NN_FRAME=hex_x`.
 | 50 m radius circle at 1200 m, 95 kg | 0.47 m from the line on average |
 | Six-waypoint mission, 95 kg and 4 kg (100 drones each) | all landed, 0 crashed |
 | Same mission from disarmed to disarmed, 4 kg | all took off, landed and disarmed, 0 crashed |
+| Same mission from disarmed to disarmed, 95 kg | all took off and landed, 0 crashed; 3 of 100 never disarmed |
 
 Charts and raw numbers are in `results/hex_x/`.
 
@@ -72,6 +73,8 @@ Hex-specific problems:
 - **Aggressive:** up to 47° tilt on the square mission (55° for the 95th percentile drone).
 - The mass-class input was constant during training, so its weight is folded into the bias (unused).
 - No yaw wobble on climb-out, unlike the quad.
+- **Landing detection can miss:** in the 95 kg full mission, 3 of 100 randomised drones landed but their
+  average throttle never fell below the detector's 1450 µs threshold, so they were not disarmed.
 
 ## Known problems
 
