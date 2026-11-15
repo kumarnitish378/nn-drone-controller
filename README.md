@@ -109,6 +109,18 @@ Hex-specific problems:
 | `quad_log.json`, `hex_log.json` | Training curves |
 | `v1/`, `v2/`, `v3/` | Earlier versions |
 
+## CI: tested model as the output
+
+`.github/workflows/ci.yml` runs on every push and pull request, once per frame:
+
+1. `ci_test.py` runs the test cases (square mission, the same at 2000 m, 10 kg and 100 kg drones,
+   the circle, and the six-waypoint mission from disarmed to disarmed) and fails if any limit is missed.
+2. Only if all of them pass, `export_model.py` packages the flight network and the workflow uploads it
+   as the artifact `model-quad_x` / `model-hex_x`: weights (`.npz`), a C header with the weights as
+   `float` arrays, and a model card with the test report.
+
+Model size (flight network only): quad 8,388 parameters (33.6 kB as float32), hex 8,902 parameters (35.6 kB).
+
 ## Running
 
 Needs Python 3 with `numpy` and `matplotlib`.

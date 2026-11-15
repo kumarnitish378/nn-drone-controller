@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 flight_log.npz
 results.json
+ci_report_*.json
+ci_*_results.json
+ci_*_results.png
+dist/

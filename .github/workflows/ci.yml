@@ -1,0 +1,54 @@
+name: Test and package models
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: ${{ matrix.frame }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - frame: quad_x
+            weights: quad_x_policy_v4.npz
+          - frame: hex_x
+            weights: hex_x_policy_v1.npz
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install numpy matplotlib
+
+      - name: Run test cases
+        run: python3 ci_test.py ${{ matrix.weights }} ${{ matrix.frame }}
+
+      - name: Upload test report and charts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-${{ matrix.frame }}
+          path: |
+            ci_report_${{ matrix.frame }}.json
+            ci_*_results.json
+            ci_*_results.png
+          if-no-files-found: ignore
+
+      # Reached only if every test case passed
+      - name: Package the model
+        run: python3 export_model.py ${{ matrix.weights }} ${{ matrix.frame }} dist
+
+      - name: Upload the model
+        uses: actions/upload-artifact@v4
+        with:
+          name: model-${{ matrix.frame }}
+          path: dist/
+          if-no-files-found: error
