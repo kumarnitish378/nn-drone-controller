@@ -76,6 +76,14 @@ Hex-specific problems:
 - **Landing detection can miss:** in the 95 kg full mission, 3 of 100 randomised drones landed but their
   average throttle never fell below the detector's 1450 µs threshold, so they were not disarmed.
 
+## Against ArduPilot
+
+`ardupilot_compare/` flies one mission with ArduCopter 4.7.2 in ArduPilot's SITL and with both networks, then
+compares the logs. In short: ArduPilot's PID controller follows the route more closely (0.10 m average error
+against 0.37 m for the quad network and 0.21 m for the hexa), lands closer to the take-off point, tilts less
+and moves its motors far more gently. The networks held the hover position slightly tighter in this one flight
+and finished the mission sooner. The two sides ran in different simulators; see that folder's README.
+
 ## Known problems
 
 - **Yaw wobble on climb-out:** diagonal motor pairs swing about ±100 µs for several seconds after lift-off.
@@ -105,6 +113,7 @@ Hex-specific problems:
 | `mission.py` | Six-waypoint mission (no ground) |
 | `mission_full.py` | Same mission from disarmed to disarmed on solid ground |
 | `plot.py` | Chart for the square missions |
+| `ardupilot_compare/` | Same mission in ArduCopter SITL and with the networks; log extraction and comparison |
 | `web/` | 3D web tool: `index.html` (built), `core.js`, `template.html`, `build.py`, `test_core.py` |
 | `mavlink_sim.py` | Real-time simulator with a MAVLink link for QGroundControl / Mission Planner |
 | `test_mavlink.py` | Scripted ground-station test for the MAVLink link |
