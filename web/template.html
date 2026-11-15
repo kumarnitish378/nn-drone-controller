@@ -1,0 +1,521 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>NN Drone Range</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@500&family=IBM+Plex+Sans:wght@400;500;600&family=Saira+Condensed:wght@600;700&display=swap" rel="stylesheet">
+<style>
+/* Layout idea: an aeronautical chart. The 3D range is the chart; the planned route is the magenta line
+   every aviation GPS draws; instruments and the flight plan sit beside it like a kneeboard. */
+:root {
+  --paper: #eef1ec;        /* chart paper */
+  --panel: #fbfcf9;
+  --ink: #16242e;
+  --ink-2: #51616b;
+  --rule: #c9d2cf;
+  --route: #b3186f;        /* planned route: aviation magenta */
+  --flown: #0d5fa6;        /* flown track */
+  --sky: #dfe9ee;
+  --ground: #d9e0d2;
+  --good: #1f7a3f; --warn: #a85f00; --bad: #b3261e;
+  --display: "Saira Condensed", "Arial Narrow", sans-serif;
+  --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --paper: #0e1a22; --panel: #15252f; --ink: #e6eef0; --ink-2: #9db0b8; --rule: #2b414d;
+    --route: #f06bb4; --flown: #5fb4f2; --sky: #0b151c; --ground: #16262b;
+    --good: #5fd08a; --warn: #f0b04a; --bad: #ff8a80; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --paper: #0e1a22; --panel: #15252f; --ink: #e6eef0; --ink-2: #9db0b8; --rule: #2b414d;
+  --route: #f06bb4; --flown: #5fb4f2; --sky: #0b151c; --ground: #16262b;
+  --good: #5fd08a; --warn: #f0b04a; --bad: #ff8a80; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body { margin: 0; }
+body { background: var(--paper); color: var(--ink); font: 15px/1.45 var(--body); -webkit-text-size-adjust: 100%; }
+.wrap { max-width: 1240px; margin: 0 auto; padding: 14px 16px 40px; display: grid; gap: 14px; }
+header { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; border-bottom: 2px solid var(--ink); padding-bottom: 8px; }
+h1 { font: 700 30px/1 var(--display); letter-spacing: .04em; text-transform: uppercase; margin: 0; }
+header p { margin: 0; color: var(--ink-2); font-size: 13px; flex: 1 1 220px; }
+.pill { font: 600 14px/1 var(--display); letter-spacing: .08em; text-transform: uppercase; padding: 6px 10px; border: 1.5px solid currentColor; border-radius: 3px; white-space: nowrap; }
+.pill[data-s="fly"] { color: var(--good); } .pill[data-s="warn"] { color: var(--warn); } .pill[data-s="bad"] { color: var(--bad); } .pill[data-s="off"] { color: var(--ink-2); }
+.cols { display: grid; gap: 14px; }
+@media (min-width: 980px) { .cols { grid-template-columns: minmax(0, 1.45fr) minmax(340px, 1fr); align-items: start; } .left { position: sticky; top: 10px; } }
+.left, .right { display: grid; gap: 14px; min-width: 0; }
+.view { position: relative; height: clamp(300px, 56vh, 600px); border: 1.5px solid var(--ink); background: var(--sky); overflow: hidden; touch-action: none; }
+.view canvas { display: block; width: 100%; height: 100%; }
+.hud { position: absolute; left: 0; right: 0; top: 0; display: grid; grid-template-columns: repeat(4, 1fr); pointer-events: none; }
+.hud div { padding: 6px 8px; border-right: 1px solid var(--rule); background: color-mix(in srgb, var(--panel) 82%, transparent); }
+.hud div:last-child { border-right: 0; }
+.hud small, .lab { display: block; font: 600 11px/1.1 var(--display); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-2); }
+.hud b { font: 500 17px/1.2 var(--mono); font-variant-numeric: tabular-nums; }
+.cam { position: absolute; right: 8px; bottom: 8px; display: flex; gap: 6px; }
+.hint { position: absolute; left: 8px; top: 58px; font-size: 12px; color: var(--ink-2); background: color-mix(in srgb, var(--panel) 80%, transparent); padding: 2px 6px; }
+button, select, input { font: inherit; color: var(--ink); }
+button { background: var(--panel); border: 1.5px solid var(--ink); border-radius: 3px; padding: 8px 12px; font: 600 15px/1 var(--display); letter-spacing: .06em; text-transform: uppercase; cursor: pointer; }
+button:hover:not(:disabled) { background: var(--ink); color: var(--panel); }
+button:disabled { opacity: .4; cursor: default; }
+button.go { background: var(--route); border-color: var(--route); color: #fff; }
+button.go:hover:not(:disabled) { background: var(--ink); border-color: var(--ink); }
+button.sm { padding: 5px 8px; font-size: 13px; }
+button[aria-pressed="true"] { background: var(--ink); color: var(--panel); }
+:focus-visible { outline: 2px solid var(--route); outline-offset: 2px; }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.bar .sp { margin-left: auto; display: flex; gap: 4px; align-items: center; }
+section { background: var(--panel); border: 1px solid var(--rule); padding: 12px; min-width: 0; }
+h2 { font: 700 18px/1 var(--display); letter-spacing: .08em; text-transform: uppercase; margin: 0 0 10px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+h2 span { font: 400 13px/1.3 var(--body); letter-spacing: 0; text-transform: none; color: var(--ink-2); }
+.motors { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 8px; margin-bottom: 8px; }
+.motors div { text-align: center; }
+.motors i { display: block; height: 46px; border: 1px solid var(--rule); position: relative; background: var(--paper); }
+.motors i u { position: absolute; left: 0; right: 0; bottom: 0; background: var(--c); }
+.motors b { font: 500 13px/1.6 var(--mono); font-variant-numeric: tabular-nums; }
+#chart { width: 100%; height: 150px; display: block; }
+.grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 10px 12px; }
+label { display: grid; gap: 3px; font-size: 13px; color: var(--ink-2); min-width: 0; }
+input[type="number"], select { width: 100%; padding: 7px 8px; background: var(--paper); border: 1px solid var(--rule); border-radius: 3px; font: 500 14px/1.2 var(--mono); }
+.seg { display: flex; } .seg button { flex: 1; border-radius: 0; } .seg button + button { border-left: 0; }
+.chk { display: flex; gap: 8px; align-items: center; color: var(--ink); }
+.item { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 8px; padding: 8px 0; border-top: 1px solid var(--rule); }
+.item:first-child { border-top: 0; }
+.item .n { font: 700 18px/1.6 var(--display); color: var(--route); text-align: center; }
+.item.done .n { color: var(--good); } .item.now { background: color-mix(in srgb, var(--route) 9%, transparent); }
+.item .f { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 6px 8px; align-items: end; }
+.item .f .x { align-self: end; justify-self: end; }
+.item .f label:first-child { grid-column: span 2; }
+.note { font-size: 13px; color: var(--ink-2); margin: 8px 0 0; }
+#log { margin: 0; padding: 0; list-style: none; font: 500 13px/1.5 var(--mono); max-height: 170px; overflow: auto; }
+#log li { display: grid; grid-template-columns: 62px 1fr; gap: 8px; border-top: 1px solid var(--rule); padding: 2px 0; }
+#log li:first-child { border-top: 0; } #log time { color: var(--ink-2); }
+.res { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px 12px; margin-bottom: 10px; }
+.res b { font: 500 16px/1.3 var(--mono); display: block; }
+.legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); margin-top: 6px; }
+.legend i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 5px; background: var(--c); }
+@media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>NN Drone Range</h1>
+    <p>A neural network flies this drone by setting each motor's PWM. Simulation only.</p>
+    <span class="pill" id="pill" data-s="off">Disarmed</span>
+  </header>
+
+  <div class="cols">
+    <div class="left">
+      <div class="view" id="view">
+        <canvas id="gl" aria-label="3D view of the drone, its planned route and flown track"></canvas>
+        <div class="hud">
+          <div><small>Height</small><b id="hAlt">0.0 m</b></div>
+          <div><small>Speed</small><b id="hSpd">0.0 m/s</b></div>
+          <div><small>Heading</small><b id="hHdg">000°</b></div>
+          <div><small>Battery</small><b id="hBat">16.0 V</b></div>
+        </div>
+        <span class="hint" id="hint">Drag to turn, pinch to zoom</span>
+        <div class="cam">
+          <button class="sm" id="camFollow" aria-pressed="false">Follow</button>
+          <button class="sm" id="camAll" aria-pressed="true">Whole route</button>
+        </div>
+      </div>
+      <div class="bar">
+        <button class="go" id="btnFly">Arm and fly</button>
+        <button id="btnPause" disabled>Pause</button>
+        <button id="btnRtl" disabled>Return</button>
+        <button id="btnLand" disabled>Land</button>
+        <button id="btnReset">Reset</button>
+        <span class="sp"><span class="lab">Speed</span>
+          <span class="seg" id="speed"><button class="sm" data-v="1">1×</button><button class="sm" data-v="5" aria-pressed="true">5×</button><button class="sm" data-v="20">20×</button><button class="sm" data-v="60">60×</button></span>
+        </span>
+      </div>
+      <section>
+        <h2>Motor PWM <span id="clock">t = 0.0 s</span></h2>
+        <div class="motors" id="motors"></div>
+        <canvas id="chart"></canvas>
+      </section>
+    </div>
+
+    <div class="right">
+      <section>
+        <h2>Flight plan <span id="planInfo"></span></h2>
+        <div class="grid" style="margin-bottom:10px">
+          <label>Load a plan
+            <select id="preset">
+              <option value="demo">Square and a circle</option>
+              <option value="six">Six waypoints to 1500 m</option>
+              <option value="circle">Circle, 50 m radius</option>
+              <option value="hop">Take off, hover, land</option>
+            </select>
+          </label>
+        </div>
+        <div id="items"></div>
+        <div class="bar" style="margin-top:10px">
+          <button class="sm" data-add="waypoint">+ Waypoint</button>
+          <button class="sm" data-add="circle">+ Circle</button>
+          <button class="sm" data-add="rtl">+ Return</button>
+          <button class="sm" data-add="land">+ Land</button>
+        </div>
+        <p class="note">North and East are metres from the take-off point; height is above it. A positive circle radius turns clockwise.</p>
+      </section>
+
+      <section>
+        <h2>Drone <span>applies when disarmed</span></h2>
+        <div class="grid">
+          <label>Frame
+            <span class="seg" id="frame"><button class="sm" data-v="quad_x" aria-pressed="true">Quad</button><button class="sm" data-v="hex_x">Hexa</button></span>
+          </label>
+          <label for="pMass">Mass (kg)<input type="number" id="pMass" min="0.5" max="100" step="0.5" value="4"></label>
+          <label for="pTw">Thrust-to-weight<input type="number" id="pTw" min="1.6" max="5" step="0.1" value="2.8"></label>
+          <label for="pBatt">Battery (V)<input type="number" id="pBatt" min="14" max="16.8" step="0.1" value="16"></label>
+          <label for="pWind">Wind (m/s)<input type="number" id="pWind" min="0" max="12" step="0.5" value="2"></label>
+          <label for="pWdir">Wind from (°)<input type="number" id="pWdir" min="0" max="359" step="5" value="45"></label>
+          <label for="pHome">Field elevation (m)<input type="number" id="pHome" min="0" max="3000" step="50" value="0"></label>
+          <label class="chk"><input type="checkbox" id="pNoise" checked> Sensor noise</label>
+        </div>
+        <h2 style="margin-top:14px">Speeds <span>m/s</span></h2>
+        <div class="grid">
+          <label for="pVh">Horizontal<input type="number" id="pVh" min="0.5" max="30" step="0.1"></label>
+          <label for="pVu">Climb<input type="number" id="pVu" min="0.5" max="30" step="0.1"></label>
+          <label for="pVd">Descent<input type="number" id="pVd" min="0.3" max="20" step="0.1"></label>
+          <label for="pVl">Final landing<input type="number" id="pVl" min="0.2" max="2" step="0.1" value="0.5"></label>
+          <label for="pRtl">Return height (m)<input type="number" id="pRtl" min="2" max="500" step="1" value="15"></label>
+          <label class="chk"><input type="checkbox" id="pAuto" checked> Set speeds from mass</label>
+        </div>
+        <p class="note" id="spdNote"></p>
+      </section>
+
+      <section>
+        <h2>Flight record</h2>
+        <div class="res" id="res"></div>
+        <ul id="log"></ul>
+        <div class="legend"><span><i style="--c:var(--route)"></i>Planned route</span><span><i style="--c:var(--flown)"></i>Flown track</span></div>
+      </section>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+/*__CORE__*/
+</script>
+<script>
+const WEIGHTS = { quad_x: /*__WQ__*/, hex_x: /*__WH__*/ };
+</script>
+<script>
+(function () {
+"use strict";
+const { Vehicle } = window.NNDrone;
+const $ = (id) => document.getElementById(id);
+const MCOL = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#6250d6"];
+const PRESETS = {
+  demo: [{ cmd: "takeoff", alt: 20 }, { cmd: "waypoint", n: 60, e: 0, alt: 30, hold: 0 }, { cmd: "waypoint", n: 60, e: 60, alt: 40, hold: 2 },
+         { cmd: "circle", n: 0, e: 60, alt: 30, radius: 15, turns: 1 }, { cmd: "rtl" }],
+  six: [{ cmd: "takeoff", alt: 50 }, { cmd: "waypoint", n: 0, e: 0, alt: 50, hold: 30 }, { cmd: "waypoint", n: 0, e: 0, alt: 500, hold: 0 },
+        { cmd: "waypoint", n: 0, e: -300, alt: 800, hold: 0 }, { cmd: "waypoint", n: 0, e: 100, alt: 1300, hold: 0 },
+        { cmd: "waypoint", n: 0, e: -340, alt: 400, hold: 0 }, { cmd: "circle", n: 0, e: -340, alt: 400, radius: 100, turns: 1 },
+        { cmd: "waypoint", n: 0, e: 410, alt: 1500, hold: 0 }, { cmd: "waypoint", n: 120, e: 410, alt: 1500, hold: 0 },
+        { cmd: "waypoint", n: 120, e: 290, alt: 1500, hold: 0 }, { cmd: "waypoint", n: 0, e: 290, alt: 1500, hold: 0 },
+        { cmd: "waypoint", n: 0, e: 410, alt: 1500, hold: 0 }, { cmd: "rtl" }],
+  circle: [{ cmd: "takeoff", alt: 30 }, { cmd: "circle", n: 0, e: 0, alt: 30, radius: 50, turns: 1 }, { cmd: "rtl" }],
+  hop: [{ cmd: "takeoff", alt: 10 }, { cmd: "waypoint", n: 0, e: 0, alt: 10, hold: 15 }, { cmd: "land" }],
+};
+const NAMES = { takeoff: "Take off", waypoint: "Waypoint", circle: "Circle", rtl: "Return to launch", land: "Land here" };
+
+// ---------------------------------------------------------------- state
+const saved = (window.claude && window.claude.hot && window.claude.hot.data) || {};
+const S = {
+  frame: saved.frame || "quad_x",
+  cfg: Object.assign({ mass: 4, tw: 2.8, batt: 16, wind: 2, wdir: 45, home: 0, noise: true, auto: true, vh: 3.1, vu: 3.1, vd: 1.9, vl: 0.5, rtl: 15 }, saved.cfg || {}),
+  mission: saved.mission || JSON.parse(JSON.stringify(PRESETS.demo)),
+  speed: saved.speed || 5, paused: false, follow: false,
+};
+if (window.claude && window.claude.hot && window.claude.hot.snapshot)
+  window.claude.hot.snapshot(() => ({ frame: S.frame, cfg: S.cfg, mission: S.mission, speed: S.speed }));
+let veh = null, track = [], maxTilt = 0, maxPwm = 0, tStart = 0, logLines = [], hist = [], lastHist = -1;
+
+function params() {
+  const c = S.cfg;
+  return { SIM_MASS: c.mass, SIM_TW_RATIO: c.tw, SIM_BATT_VOLT: c.batt, SIM_WIND_SPD: c.wind, SIM_WIND_DIR: c.wdir, SIM_NOISE: c.noise ? 1 : 0,
+           HOME_ALT: c.home, WPNAV_SPEED: c.vh * 100, WPNAV_SPEED_UP: c.vu * 100, WPNAV_SPEED_DN: c.vd * 100, LAND_SPEED: c.vl * 100, RTL_ALT: c.rtl * 100 };
+}
+function autoSpeeds() {
+  const r = Math.pow(S.cfg.mass, 1 / 6);
+  S.cfg.vh = +(2.5 * r).toFixed(1); S.cfg.vu = +(2.5 * r).toFixed(1); S.cfg.vd = +(1.5 * r).toFixed(1);
+}
+function build() {
+  if (S.cfg.auto) autoSpeeds();
+  veh = new Vehicle(S.frame, WEIGHTS[S.frame], params(), (t, s) => { logLines.unshift([t, s]); if (logLines.length > 60) logLines.pop(); drawLog(); });
+  track = []; maxTilt = 0; maxPwm = 0; hist = []; lastHist = -1; logLines = []; S.paused = false;
+  drawLog(); drawMotors(true); syncInputs(); drawPlan(); drawResult(); scene.resetTrack(); scene.setDrone(S.frame, veh.L);
+  if (!S.follow) scene.fit(planPoints());
+}
+
+// ---------------------------------------------------------------- planned route geometry (n, e, alt)
+function planPoints() {
+  const pts = [[0, 0, 0]]; let cur = [0, 0, 0];
+  const rtlAlt = S.cfg.rtl;
+  for (const it of S.mission) {
+    if (it.cmd === "takeoff") { cur = [cur[0], cur[1], it.alt]; pts.push(cur); }
+    else if (it.cmd === "waypoint") { cur = [it.n, it.e, it.alt]; pts.push(cur); }
+    else if (it.cmd === "circle") {
+      const R = Math.abs(it.radius || 10); let d = [cur[0] - it.n, cur[1] - it.e]; const m = Math.hypot(d[0], d[1]);
+      d = m > 1e-3 ? [d[0] / m, d[1] / m] : [1, 0];
+      const a0 = Math.atan2(d[1], d[0]), sg = (it.radius || 10) > 0 ? 1 : -1, turns = Math.max(it.turns || 1, 1);
+      for (let k = 0; k <= 64; k++) { const a = a0 + sg * 2 * Math.PI * turns * k / 64; pts.push([it.n + R * Math.cos(a), it.e + R * Math.sin(a), it.alt]); }
+      cur = pts[pts.length - 1];
+    } else if (it.cmd === "rtl") { const a = Math.max(cur[2], rtlAlt); pts.push([cur[0], cur[1], a], [0, 0, a], [0, 0, 0]); cur = [0, 0, 0]; }
+    else if (it.cmd === "land") { pts.push([cur[0], cur[1], 0]); cur = [cur[0], cur[1], 0]; }
+  }
+  return pts;
+}
+function planStats() {
+  const p = planPoints(); let len = 0, top = 0;
+  for (let i = 1; i < p.length; i++) { len += Math.hypot(p[i][0] - p[i - 1][0], p[i][1] - p[i - 1][1], p[i][2] - p[i - 1][2]); top = Math.max(top, p[i][2]); }
+  return { len, top };
+}
+
+// ---------------------------------------------------------------- 3D scene
+const scene = (function () {
+  const el = $("view"), canvas = $("gl");
+  if (!window.THREE) {
+    $("hint").textContent = "The 3D view could not load. The simulation and charts still work.";
+    const no = () => {}; return { resetTrack: no, addTrack: no, setDrone: no, fit: no, plan: no, update: no, theme: no, clearZoom: no };
+  }
+  const T = THREE, renderer = new T.WebGLRenderer({ canvas, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  const sc = new T.Scene(), cam = new T.PerspectiveCamera(50, 1, 0.05, 200000);
+  const V = (n, e, a) => new T.Vector3(e, a, -n);            // north/east/up -> three.js (x east, y up, z south)
+  const mat = { route: new T.LineBasicMaterial(), flown: new T.LineBasicMaterial(), grid: null, stalk: new T.LineBasicMaterial({ transparent: true, opacity: 0.45 }),
+                body: new T.MeshBasicMaterial(), nose: new T.MeshBasicMaterial(), wp: new T.MeshBasicMaterial(), ground: new T.MeshBasicMaterial(), pad: new T.MeshBasicMaterial(), tgt: new T.MeshBasicMaterial() };
+  const ground = new T.Mesh(new T.PlaneGeometry(1, 1), mat.ground); ground.rotation.x = -Math.PI / 2; ground.position.y = -0.02; sc.add(ground);
+  let grid = null; const routeLine = new T.Line(new T.BufferGeometry(), mat.route); sc.add(routeLine);
+  const stalks = new T.LineSegments(new T.BufferGeometry(), mat.stalk); sc.add(stalks);
+  const wps = new T.Group(); sc.add(wps);
+  const MAXP = 24000, flownPos = new Float32Array(MAXP * 3), flownGeo = new T.BufferGeometry();
+  flownGeo.setAttribute("position", new T.BufferAttribute(flownPos, 3)); flownGeo.setDrawRange(0, 0);
+  const flownLine = new T.Line(flownGeo, mat.flown); flownLine.frustumCulled = false; sc.add(flownLine); let nFl = 0;
+  const pad = new T.Mesh(new T.RingGeometry(0.6, 0.8, 40), mat.pad); pad.rotation.x = -Math.PI / 2; pad.position.y = 0.01; sc.add(pad);
+  const drone = new T.Group(); sc.add(drone); drone.matrixAutoUpdate = false;
+  const shadow = new T.Mesh(new T.CircleGeometry(0.3, 24), new T.MeshBasicMaterial({ color: 0x000000, transparent: true, opacity: 0.25 })); shadow.rotation.x = -Math.PI / 2; shadow.position.y = 0.02; sc.add(shadow);
+  const plumb = new T.Line(new T.BufferGeometry().setFromPoints([new T.Vector3(), new T.Vector3()]), mat.stalk); sc.add(plumb);
+  const tgt = new T.Mesh(new T.SphereGeometry(1, 12, 8), mat.tgt); sc.add(tgt);
+  let droneL = 1, span = 100, focus = new T.Vector3(), az = -0.7, elv = 0.55, dist = 120, userDist = null;
+
+  function theme() {
+    const cs = getComputedStyle(document.documentElement), g = (n) => new T.Color(cs.getPropertyValue(n).trim());
+    renderer.setClearColor(g("--sky")); mat.ground.color = g("--ground"); mat.route.color = g("--route"); mat.wp.color = g("--route");
+    mat.flown.color = g("--flown"); mat.stalk.color = g("--ink-2"); mat.body.color = g("--ink"); mat.nose.color = g("--route");
+    mat.pad.color = g("--ink"); mat.tgt.color = g("--flown");
+    if (grid) { sc.remove(grid); grid = null; } makeGrid();
+  }
+  function makeGrid() {
+    const cs = getComputedStyle(document.documentElement), c = new T.Color(cs.getPropertyValue("--rule").trim());
+    const cell = Math.pow(10, Math.max(0, Math.round(Math.log10(span / 8)))), size = cell * 40;
+    if (grid) sc.remove(grid);
+    grid = new T.GridHelper(size, 40, c, c); grid.material.transparent = true; grid.material.opacity = 0.9; sc.add(grid);
+    ground.scale.set(size, size, 1);
+  }
+  function setDrone(frame, L) {
+    droneL = L; while (drone.children.length) drone.remove(drone.children[0]);
+    const fr = window.NNDrone.FRAMES[frame], arm = 0.17;
+    const hub = new T.Mesh(new T.BoxGeometry(0.12, 0.04, 0.08), mat.body); drone.add(hub);
+    fr.angles.forEach((a) => {
+      const r = a * Math.PI / 180, x = arm * Math.cos(r), z = arm * Math.sin(r);          // local: x forward, z right
+      const beam = new T.Mesh(new T.BoxGeometry(arm, 0.012, 0.018), Math.abs(a) < 90 ? mat.nose : mat.body);
+      beam.position.set(x / 2, 0, z / 2); beam.rotation.y = -r; drone.add(beam);
+      const prop = new T.Mesh(new T.CylinderGeometry(0.075, 0.075, 0.006, 20), Math.abs(a) < 90 ? mat.nose : mat.body);
+      prop.position.set(x, 0.02, z); drone.add(prop);
+    });
+  }
+  function plan(pts) {
+    routeLine.geometry.dispose(); routeLine.geometry = new T.BufferGeometry().setFromPoints(pts.map((p) => V(p[0], p[1], p[2])));
+    while (wps.children.length) wps.remove(wps.children[0]);
+    const seg = []; let cur = [0, 0, 0];
+    S.mission.forEach((it) => {
+      let p = null;
+      if (it.cmd === "takeoff") p = [cur[0], cur[1], it.alt]; else if (it.cmd === "waypoint" || it.cmd === "circle") p = [it.n, it.e, it.alt];
+      if (p) { const m = new T.Mesh(new T.SphereGeometry(1, 12, 8), mat.wp); m.position.copy(V(p[0], p[1], p[2])); m.userData.wp = 1; wps.add(m); seg.push(V(p[0], p[1], p[2]), V(p[0], p[1], 0)); cur = p; }
+    });
+    stalks.geometry.dispose(); stalks.geometry = new T.BufferGeometry().setFromPoints(seg);
+  }
+  function fit(pts) {
+    const b = new T.Box3(); pts.forEach((p) => b.expandByPoint(V(p[0], p[1], p[2]))); b.expandByPoint(new T.Vector3(0, 0, 0));
+    const s = b.getSize(new T.Vector3()); span = Math.max(s.x, s.y, s.z, 10); b.getCenter(focus); dist = span * 1.55; userDist = null; makeGrid();
+  }
+  function resetTrack() { nFl = 0; flownGeo.setDrawRange(0, 0); }
+  function addTrack(n, e, a) {
+    if (nFl >= MAXP) { for (let i = 0; i < MAXP / 2; i++) { flownPos[i * 3] = flownPos[i * 6]; flownPos[i * 3 + 1] = flownPos[i * 6 + 1]; flownPos[i * 3 + 2] = flownPos[i * 6 + 2]; } nFl = MAXP / 2; }
+    flownPos[nFl * 3] = e; flownPos[nFl * 3 + 1] = a; flownPos[nFl * 3 + 2] = -n; nFl++;
+    flownGeo.setDrawRange(0, nFl); flownGeo.attributes.position.needsUpdate = true;
+  }
+  const mapV = (v) => new T.Vector3(-v[1], v[2], -v[0]);       // sim world (north, west, up) -> three.js
+  function qrot(q, v) { const w = q[0], x = q[1], y = q[2], z = q[3];
+    const tx = 2 * (y * v[2] - z * v[1]), ty = 2 * (z * v[0] - x * v[2]), tz = 2 * (x * v[1] - y * v[0]);
+    return [v[0] + w * tx + (y * tz - z * ty), v[1] + w * ty + (z * tx - x * tz), v[2] + w * tz + (x * ty - y * tx)]; }
+  function update(tm) {
+    const w = el.clientWidth, h = el.clientHeight;
+    if (canvas.width !== Math.round(w * renderer.getPixelRatio()) || canvas.height !== Math.round(h * renderer.getPixelRatio())) { renderer.setSize(w, h, false); cam.aspect = w / h; cam.updateProjectionMatrix(); }
+    const pos = V(tm.n, tm.e, tm.alt);
+    const d = S.follow ? (userDist || Math.max(6 * droneL, 4)) : (userDist || dist);
+    const f = S.follow ? pos : focus;
+    cam.position.set(f.x + d * Math.cos(elv) * Math.sin(az), f.y + d * Math.sin(elv), f.z + d * Math.cos(elv) * Math.cos(az));
+    cam.lookAt(f);
+    // keep the drone and markers visible from far away: never smaller than a few pixels
+    const far = cam.position.distanceTo(pos), sFar = far * 0.03;
+    const k = Math.max(droneL, sFar / 0.24);
+    const F = mapV(qrot(tm.q, [1, 0, 0])), U = mapV(qrot(tm.q, [0, 0, 1])), R = mapV(qrot(tm.q, [0, -1, 0]));
+    drone.matrix.makeBasis(F, U, R).scale(new T.Vector3(k, k, k)).setPosition(pos); drone.matrixWorldNeedsUpdate = true;
+    shadow.position.set(pos.x, 0.02, pos.z); shadow.scale.setScalar(k);
+    plumb.geometry.setFromPoints([pos, new T.Vector3(pos.x, 0, pos.z)]);
+    tgt.position.copy(V(tm.carrot[0], tm.carrot[1], tm.carrot[2])); tgt.scale.setScalar(cam.position.distanceTo(tgt.position) * 0.006); tgt.visible = tm.phase === "fly";
+    wps.children.forEach((m) => m.scale.setScalar(cam.position.distanceTo(m.position) * 0.008));
+    pad.scale.setScalar(Math.max(droneL, cam.position.length() * 0.01));
+    renderer.render(sc, cam);
+  }
+  // orbit controls: one pointer turns, two pointers pinch, wheel zooms
+  const ptr = new Map(); let pinch = 0;
+  el.addEventListener("pointerdown", (e) => { if (e.target.closest("button")) return; el.setPointerCapture(e.pointerId); ptr.set(e.pointerId, [e.clientX, e.clientY]); pinch = 0; $("hint").style.display = "none"; });
+  el.addEventListener("pointermove", (e) => {
+    if (!ptr.has(e.pointerId)) return; const p = ptr.get(e.pointerId), dx = e.clientX - p[0], dy = e.clientY - p[1]; ptr.set(e.pointerId, [e.clientX, e.clientY]);
+    if (ptr.size === 1) { az -= dx * 0.008; elv = Math.max(-0.2, Math.min(1.5, elv + dy * 0.006)); }
+    else if (ptr.size === 2) { const a = [...ptr.values()], dd = Math.hypot(a[0][0] - a[1][0], a[0][1] - a[1][1]); if (pinch) zoom(pinch / dd); pinch = dd; }
+  });
+  const up = (e) => { ptr.delete(e.pointerId); pinch = 0; };
+  el.addEventListener("pointerup", up); el.addEventListener("pointercancel", up);
+  el.addEventListener("wheel", (e) => { e.preventDefault(); zoom(Math.exp(e.deltaY * 0.0012)); }, { passive: false });
+  function zoom(f) { const cur = userDist || (S.follow ? Math.max(6 * droneL, 4) : dist); userDist = Math.max(1.5 * droneL, Math.min(span * 8 + 50, cur * f)); }
+  function clearZoom() { userDist = null; }
+  theme();
+  new MutationObserver(theme).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+  if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", theme);
+  return { resetTrack, addTrack, setDrone, fit, plan, update, theme, clearZoom };
+})();
+
+// ---------------------------------------------------------------- panels
+function drawPlan() {
+  const flying = veh && veh.armed, box = $("items"); box.innerHTML = "";
+  S.mission.forEach((it, i) => {
+    const row = document.createElement("div"); row.className = "item" + (veh && veh.reached.includes(i) ? " done" : "") + (veh && veh.running && veh.seq === i ? " now" : "");
+    const dis = flying ? " disabled" : "", num = (k, lab, step) => `<label>${lab}<input type="number" data-i="${i}" data-k="${k}" step="${step || 1}" value="${it[k] ?? 0}"${dis}></label>`;
+    let f = `<label>Step<select data-i="${i}" data-k="cmd"${dis || (i === 0 ? " disabled" : "")}>${Object.keys(NAMES).filter((k) => (i === 0) === (k === "takeoff")).map((k) => `<option value="${k}"${k === it.cmd ? " selected" : ""}>${NAMES[k]}</option>`).join("")}</select></label>`;
+    if (it.cmd === "takeoff") f += num("alt", "Height (m)");
+    if (it.cmd === "waypoint") f += num("n", "North (m)") + num("e", "East (m)") + num("alt", "Height (m)") + num("hold", "Hold (s)");
+    if (it.cmd === "circle") f += num("n", "Centre N (m)") + num("e", "Centre E (m)") + num("alt", "Height (m)") + num("radius", "Radius (m)") + num("turns", "Turns");
+    if (i > 0) f += `<button class="sm x" data-del="${i}" aria-label="Remove step ${i + 1}"${dis}>Remove</button>`;
+    row.innerHTML = `<div class="n">${i + 1}</div><div class="f">${f}</div>`; box.appendChild(row);
+  });
+  const st = planStats(), tEst = st.len / Math.max(0.5, Math.min(S.cfg.vh, S.cfg.vu));
+  $("planInfo").textContent = `${S.mission.length} steps, ${st.len < 1000 ? st.len.toFixed(0) + " m" : (st.len / 1000).toFixed(2) + " km"}, top ${st.top.toFixed(0)} m`;
+  document.querySelectorAll("[data-add]").forEach((b) => (b.disabled = !!flying));
+  scene.plan(planPoints());
+}
+function syncInputs() {
+  const c = S.cfg, flying = veh && veh.armed, set = (id, v) => { if (document.activeElement !== $(id)) $(id).value = v; };
+  set("pMass", c.mass); set("pTw", c.tw); set("pBatt", c.batt); set("pWind", c.wind); set("pWdir", c.wdir); set("pHome", c.home);
+  set("pVh", c.vh); set("pVu", c.vu); set("pVd", c.vd); set("pVl", c.vl); set("pRtl", c.rtl);
+  $("pNoise").checked = c.noise; $("pAuto").checked = c.auto;
+  ["pMass", "pTw", "pBatt", "pWind", "pWdir", "pHome", "pVh", "pVu", "pVd", "pVl", "pRtl", "pNoise", "pAuto", "preset"].forEach((id) => ($(id).disabled = !!flying || (c.auto && ["pVh", "pVu", "pVd"].includes(id))));
+  document.querySelectorAll("#frame button").forEach((b) => { b.setAttribute("aria-pressed", b.dataset.v === S.frame); b.disabled = !!flying; });
+  document.querySelectorAll("#speed button").forEach((b) => b.setAttribute("aria-pressed", +b.dataset.v === S.speed));
+  const top = 3.2 * Math.pow(c.mass, 1 / 6);
+  $("spdNote").textContent = c.vh > top ? `This drone tops out near ${top.toFixed(1)} m/s horizontally; above that it falls behind the route.` : `A ${c.mass} kg drone follows the route well up to about ${top.toFixed(1)} m/s.`;
+  $("camFollow").setAttribute("aria-pressed", S.follow); $("camAll").setAttribute("aria-pressed", !S.follow);
+}
+function drawMotors(rebuild) {
+  const box = $("motors"), M = veh.sim.M;
+  if (rebuild || box.children.length !== M) box.innerHTML = Array.from({ length: M }, (_, i) => `<div><i style="--c:${MCOL[i]}"><u></u></i><span class="lab">M${i + 1}</span><b>1000</b></div>`).join("");
+  veh.pwm.forEach((p, i) => { const d = box.children[i]; d.querySelector("u").style.height = Math.max(0, Math.min(100, (p - 1000) / 10)) + "%"; d.querySelector("b").textContent = Math.round(p); });
+}
+function drawChart() {
+  const cv = $("chart"), dpr = Math.min(window.devicePixelRatio || 1, 2), w = cv.clientWidth, h = cv.clientHeight;
+  if (cv.width !== Math.round(w * dpr)) { cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); }
+  const g = cv.getContext("2d"), cs = getComputedStyle(document.documentElement); g.setTransform(dpr, 0, 0, dpr, 0, 0); g.clearRect(0, 0, w, h);
+  const L = 40, R = 6, T = 6, B = 18, y = (p) => T + (2000 - p) / 1000 * (h - T - B);
+  g.font = "11px " + cs.getPropertyValue("--mono"); g.fillStyle = cs.getPropertyValue("--ink-2"); g.strokeStyle = cs.getPropertyValue("--rule"); g.lineWidth = 1; g.textBaseline = "middle"; g.textAlign = "right";
+  [1000, 1250, 1500, 1750, 2000].forEach((p) => { g.beginPath(); g.moveTo(L, y(p)); g.lineTo(w - R, y(p)); g.stroke(); g.fillText(p, L - 5, y(p)); });
+  if (hist.length < 2) return;
+  const t0 = hist[0][0], t1 = hist[hist.length - 1][0], x = (t) => L + (t - t0) / Math.max(t1 - t0, 1e-6) * (w - L - R);
+  g.textAlign = "left"; g.textBaseline = "alphabetic"; g.fillText(t0.toFixed(0) + " s", L, h - 4); g.textAlign = "right"; g.fillText(t1.toFixed(0) + " s", w - R, h - 4);
+  const M = veh.sim.M; g.lineWidth = 1.3;
+  for (let m = 0; m < M; m++) { g.strokeStyle = MCOL[m]; g.beginPath(); hist.forEach((r, i) => (i ? g.lineTo(x(r[0]), y(r[1 + m])) : g.moveTo(x(r[0]), y(r[1 + m])))); g.stroke(); }
+}
+function drawLog() { $("log").innerHTML = logLines.map(([t, s]) => `<li><time>${t.toFixed(1)} s</time><span>${s}</span></li>`).join("") || "<li><time>0.0 s</time><span>Ready. Press Arm and fly.</span></li>"; }
+function drawResult() {
+  const td = veh.touchdown, cell = (l, v) => `<div><span class="lab">${l}</span><b>${v}</b></div>`;
+  $("res").innerHTML = cell("Flight time", veh.armed || veh.done ? (veh.t - tStart).toFixed(0) + " s" : "not flown") + cell("Steps reached", `${veh.reached.length} of ${S.mission.filter((m) => m.cmd !== "rtl" && m.cmd !== "land").length}`) +
+    cell("Steepest tilt", maxTilt.toFixed(0) + "°") + cell("Highest PWM", maxPwm ? Math.round(maxPwm) + " µs" : "none") +
+    cell("Touchdown", td ? td.speed.toFixed(2) + " m/s" : "not yet") + cell("Landing error", td ? td.offset.toFixed(2) + " m" : "not yet");
+}
+function drawStatus(tm) {
+  const pill = $("pill"), ph = veh.crashed ? "bad" : veh.phase === "fly" ? "fly" : veh.armed ? "warn" : "off";
+  pill.dataset.s = ph; pill.textContent = S.paused ? "Paused" : veh.status;
+  $("hAlt").textContent = tm.alt.toFixed(1) + " m"; $("hSpd").textContent = tm.speed.toFixed(1) + " m/s";
+  $("hHdg").textContent = String(Math.round(tm.heading) % 360).padStart(3, "0") + "°"; $("hBat").textContent = tm.volt.toFixed(1) + " V";
+  $("clock").textContent = "t = " + tm.t.toFixed(1) + " s";
+  $("btnFly").disabled = veh.armed || veh.crashed; $("btnPause").disabled = !veh.armed; $("btnPause").textContent = S.paused ? "Resume" : "Pause";
+  $("btnRtl").disabled = $("btnLand").disabled = veh.phase !== "fly";
+}
+
+// ---------------------------------------------------------------- main loop
+let lastReal = performance.now(), acc = 0, wasArmed = false, lastSeq = -2, lastReached = -1, uiTick = 0;
+function frame(now) {
+  const dtReal = Math.min(0.1, (now - lastReal) / 1000); lastReal = now;
+  if (veh.armed && !S.paused) {
+    acc += dtReal * S.speed; let n = Math.min(Math.floor(acc / veh.dt), 4000); acc -= n * veh.dt; if (acc > veh.dt * 4000) acc = 0;
+    while (n-- > 0 && veh.armed) {
+      veh.step(); const s = veh.sim;
+      const tilt = Math.acos(Math.max(-1, Math.min(1, 1 - 2 * (s.q[1] * s.q[1] + s.q[2] * s.q[2])))) * 180 / Math.PI;
+      if (veh.phase === "fly") { if (tilt > maxTilt) maxTilt = tilt; for (const p of veh.pwm) if (p > maxPwm) maxPwm = p; }
+      const k = Math.floor(veh.t / 0.1);
+      if (k !== lastHist) { lastHist = k; hist.push([veh.t, ...veh.pwm]); if (hist.length > 600) hist.shift(); if (!s.onGround) scene.addTrack(s.p[0], -s.p[1], s.p[2]); }
+    }
+  }
+  const tm = veh.telemetry(); scene.update(tm); drawStatus(tm); drawMotors();
+  if (++uiTick % 6 === 0) { drawChart(); drawResult(); }
+  if (veh.armed !== wasArmed || veh.seq !== lastSeq || veh.reached.length !== lastReached) { wasArmed = veh.armed; lastSeq = veh.seq; lastReached = veh.reached.length; drawPlan(); syncInputs(); }
+  requestAnimationFrame(frame);
+}
+
+// ---------------------------------------------------------------- events
+$("btnFly").onclick = () => { if (veh.done || veh.crashed) build(); tStart = veh.t; veh.P = Object.assign(veh.P, params()); if (veh.start(S.mission.map((m) => Object.assign({}, m)))) { acc = 0; S.paused = false; } };
+$("btnPause").onclick = () => { S.paused = !S.paused; };
+$("btnRtl").onclick = () => veh.command("rtl");
+$("btnLand").onclick = () => veh.command("land");
+$("btnReset").onclick = () => build();
+$("camFollow").onclick = () => { S.follow = true; scene.clearZoom(); syncInputs(); };
+$("camAll").onclick = () => { S.follow = false; scene.fit(planPoints()); syncInputs(); };
+$("speed").onclick = (e) => { const b = e.target.closest("button"); if (b) { S.speed = +b.dataset.v; acc = 0; syncInputs(); } };
+$("frame").onclick = (e) => { const b = e.target.closest("button"); if (b && !veh.armed) { S.frame = b.dataset.v; build(); } };
+$("preset").onchange = (e) => { if (veh.armed) return; S.mission = JSON.parse(JSON.stringify(PRESETS[e.target.value])); if (e.target.value === "six") S.cfg.rtl = Math.max(S.cfg.rtl, 15); build(); };
+const bind = (id, key, isNum = true) => $(id).addEventListener("change", (e) => {
+  if (veh.armed) return; let v = isNum ? parseFloat(e.target.value) : e.target.checked; if (isNum && !isFinite(v)) return;
+  if (isNum) v = Math.max(parseFloat(e.target.min), Math.min(parseFloat(e.target.max), v)); S.cfg[key] = v; build(); });
+[["pMass", "mass"], ["pTw", "tw"], ["pBatt", "batt"], ["pWind", "wind"], ["pWdir", "wdir"], ["pHome", "home"], ["pVh", "vh"], ["pVu", "vu"], ["pVd", "vd"], ["pVl", "vl"], ["pRtl", "rtl"]].forEach(([a, b]) => bind(a, b));
+bind("pNoise", "noise", false); bind("pAuto", "auto", false);
+$("items").addEventListener("change", (e) => {
+  const i = +e.target.dataset.i, k = e.target.dataset.k; if (k === undefined || veh.armed) return;
+  if (k === "cmd") { const prev = S.mission[i], base = { n: prev.n ?? 0, e: prev.e ?? 0, alt: prev.alt ?? 20 };
+    S.mission[i] = e.target.value === "waypoint" ? { cmd: "waypoint", ...base, hold: 0 } : e.target.value === "circle" ? { cmd: "circle", ...base, radius: 15, turns: 1 } : { cmd: e.target.value }; }
+  else { let v = parseFloat(e.target.value); if (!isFinite(v)) v = 0; if (k === "alt") v = Math.max(1, Math.min(3000, v)); if (k === "turns") v = Math.max(1, Math.min(20, v)); if (k === "hold") v = Math.max(0, v);
+    if (k === "radius" && Math.abs(v) < 2) v = 2; S.mission[i][k] = v; }
+  drawPlan(); if (!S.follow) scene.fit(planPoints());
+});
+$("items").addEventListener("click", (e) => { const d = e.target.dataset.del; if (d !== undefined && !veh.armed) { S.mission.splice(+d, 1); drawPlan(); if (!S.follow) scene.fit(planPoints()); } });
+document.querySelectorAll("[data-add]").forEach((b) => b.onclick = () => {
+  if (veh.armed) return; let last = [0, 0, 20]; S.mission.forEach((m) => { if (m.alt !== undefined) last = [m.n ?? last[0], m.e ?? last[1], m.alt]; });
+  const c = b.dataset.add; S.mission.push(c === "waypoint" ? { cmd: c, n: last[0] + 30, e: last[1], alt: last[2], hold: 0 } : c === "circle" ? { cmd: c, n: last[0], e: last[1], alt: last[2], radius: 15, turns: 1 } : { cmd: c });
+  drawPlan(); if (!S.follow) scene.fit(planPoints());
+});
+
+build();
+requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

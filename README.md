@@ -105,6 +105,7 @@ Hex-specific problems:
 | `mission.py` | Six-waypoint mission (no ground) |
 | `mission_full.py` | Same mission from disarmed to disarmed on solid ground |
 | `plot.py` | Chart for the square missions |
+| `web/` | 3D web tool: `index.html` (built), `core.js`, `template.html`, `build.py`, `test_core.py` |
 | `mavlink_sim.py` | Real-time simulator with a MAVLink link for QGroundControl / Mission Planner |
 | `test_mavlink.py` | Scripted ground-station test for the MAVLink link |
 | `quad_x_policy_v4.npz`, `hex_x_policy_v1.npz` | Trained weights (`pi_W0..2`, `pi_b0..2` are the flight network) |
@@ -113,7 +114,8 @@ Hex-specific problems:
 
 ## CI: tested model as the output
 
-`.github/workflows/ci.yml` runs on every push and pull request, once per frame:
+`.github/workflows/ci.yml` runs on every push and pull request. A third job checks the ground station link
+and the web tool. The model jobs run once per frame:
 
 1. `ci_test.py` runs the test cases (square mission, the same at 2000 m, 10 kg and 100 kg drones,
    the circle, and the six-waypoint mission from disarmed to disarmed) and fails if any limit is missed.
@@ -154,6 +156,21 @@ uploads and reads back a mission, flies it in AUTO, then does a GUIDED take-off,
 for a 1 kg quad, a 4 kg quad and a 95 kg hexacopter. **It has not been tried with the real QGroundControl
 or Mission Planner yet**; they send more requests than the script does, so expect some rough edges.
 No RC or joystick input, no fence or rally points, and battery percentage is not estimated.
+
+## 3D web tool
+
+`web/index.html` is a single page with a 3D view, a flight-plan editor and a drone configurator. The
+simulator and both networks run inside the browser, so it needs no Python: open the file in a browser
+(it loads three.js from a CDN, so it needs an internet connection the first time).
+
+- Plan: take-off, waypoints, circles, return to launch and land, with a few ready-made plans.
+- Drone: quad or hexa, mass 0.5-100 kg, thrust-to-weight, battery, wind, field elevation, sensor noise, speeds.
+- Watch: the planned route and flown track in 3D, per-motor PWM bars and chart, and a flight record.
+
+`web/core.js` is a port of `sim.py` and of the flight logic in `mavlink_sim.py`; `web/test_core.py` flies the
+same mission in both and checks the tracks agree (they do, to within 5 cm for a 4 kg quad and 12 cm for a
+95 kg hexacopter, with identical step counts). Rebuild the page with `python3 web/build.py` after changing
+`web/core.js`, `web/template.html` or the weights.
 
 ## Running
 

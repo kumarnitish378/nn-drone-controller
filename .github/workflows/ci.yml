@@ -52,3 +52,26 @@ jobs:
           name: model-${{ matrix.frame }}
           path: dist/
           if-no-files-found: error
+
+  links:
+    name: ground station link and web tool
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Scripted ground station flies a mission over MAVLink (4 kg quad)
+        run: python3 test_mavlink.py quad_x 4
+      - name: Scripted ground station flies a mission over MAVLink (95 kg hexacopter)
+        run: python3 test_mavlink.py hex_x 95
+      - name: Browser simulator core matches the Python simulator
+        run: python3 web/test_core.py
+      - name: Web page is up to date with its sources
+        run: python3 web/build.py && git diff --exit-code web/index.html
