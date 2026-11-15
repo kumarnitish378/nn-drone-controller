@@ -153,7 +153,9 @@ def summarise(r, i=None):
 
 
 nom = fly(1, False, 1, record=True)
-rob = fly(100, True, 2)
+import os
+N_ROB = int(os.environ.get("MISSION_N", "100"))      # number of randomised drones (CI uses fewer)
+rob = fly(N_ROB, True, 2)
 pf = nom["pwm_full"]; dtn = nom["dt"]; tf = np.arange(1, len(pf) + 1) * dtn
 T0 = T_OFF + T_IDLE + T_SPOOL
 def at(t0, t1): return pf[(tf > t0) & (tf <= t1)]
