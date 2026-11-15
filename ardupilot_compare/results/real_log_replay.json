@@ -1,0 +1,171 @@
+{
+ "log": "erlerobot/logs: pxf/copter/5-12-2014/218.BIN (ArduCopter 3.3-dev, Erle-Copter quad X, real flight)",
+ "assumed_mass_kg": 1.5,
+ "network_rate_hz": 93.5,
+ "compared_at_hz": 10,
+ "log_facts": {
+  "flight_s": 335.0,
+  "gps_satellites_median": 11.0,
+  "gps_hdop_median": 1.3,
+  "pwm_rate_hz": 10.0,
+  "imu_rate_hz": 50.0,
+  "battery_voltage_logged": false,
+  "mission_items": [
+   [
+    1,
+    22,
+    10.0
+   ],
+   [
+    2,
+    16,
+    10.0
+   ],
+   [
+    3,
+    16,
+    10.0
+   ],
+   [
+    4,
+    16,
+    10.0
+   ]
+  ]
+ },
+ "seconds_replayed": 268.0,
+ "pwm": {
+  "ardupilot_mean_us": 1698.0,
+  "network_mean_us": 1598.0,
+  "ardupilot_range_us": [
+   1323.9793753476763,
+   1941.9537582308035
+  ],
+  "network_range_us": [
+   1137,
+   1900
+  ],
+  "ardupilot_change_per_0p1s_us": 5.1,
+  "network_change_per_0p1s_us": 8.1,
+  "network_time_at_limits_share": 0.0
+ },
+ "shadow_replay": {
+  "whole_replay": {
+   "collective": {
+    "correlation": 0.12,
+    "same_direction_share": 0.58,
+    "ardupilot_rms_us": 20.0,
+    "network_rms_us": 103.2
+   },
+   "roll": {
+    "correlation": -0.0,
+    "same_direction_share": 0.46,
+    "ardupilot_rms_us": 8.8,
+    "network_rms_us": 23.3
+   },
+   "pitch": {
+    "correlation": 0.38,
+    "same_direction_share": 0.69,
+    "ardupilot_rms_us": 15.6,
+    "network_rms_us": 29.1
+   },
+   "yaw": {
+    "correlation": 0.27,
+    "same_direction_share": 0.6,
+    "ardupilot_rms_us": 17.8,
+    "network_rms_us": 60.4
+   }
+  },
+  "hovering_only": {
+   "collective": {
+    "correlation": 0.17,
+    "same_direction_share": 0.62,
+    "ardupilot_rms_us": 10.7,
+    "network_rms_us": 105.0
+   },
+   "roll": {
+    "correlation": 0.33,
+    "same_direction_share": 0.61,
+    "ardupilot_rms_us": 7.1,
+    "network_rms_us": 15.1
+   },
+   "pitch": {
+    "correlation": -0.03,
+    "same_direction_share": 0.6,
+    "ardupilot_rms_us": 7.7,
+    "network_rms_us": 17.0
+   },
+   "yaw": {
+    "correlation": 0.18,
+    "same_direction_share": 0.55,
+    "ardupilot_rms_us": 16.1,
+    "network_rms_us": 47.3
+   }
+  },
+  "hovering_share": 0.7,
+  "correlation_with_ardupilots_attitude_demand": {
+   "roll": {
+    "ardupilot": 0.42,
+    "network": 0.4
+   },
+   "pitch": {
+    "ardupilot": 0.54,
+    "network": 0.66
+   },
+   "yaw": {
+    "ardupilot": 0.33,
+    "network": 0.68
+   }
+  }
+ },
+ "closed_loop_same_target_track": [
+  {
+   "mode": "LOITER",
+   "start_s": 88.2,
+   "length_s": 28.8,
+   "target_speed_mean_mps": 0.26,
+   "real_horizontal_error_mean_m": 0.298,
+   "real_horizontal_error_max_m": 0.849,
+   "real_height_error_mean_m": 0.17,
+   "network_sim_horizontal_error_mean_m": 0.26,
+   "network_sim_horizontal_error_max_m": 1.054,
+   "network_sim_height_error_mean_m": 0.069
+  },
+  {
+   "mode": "GUIDED",
+   "start_s": 118.4,
+   "length_s": 81.6,
+   "target_speed_mean_mps": 0.31,
+   "real_horizontal_error_mean_m": 0.826,
+   "real_horizontal_error_max_m": 3.558,
+   "real_height_error_mean_m": 0.05,
+   "network_sim_horizontal_error_mean_m": 0.359,
+   "network_sim_horizontal_error_max_m": 3.477,
+   "network_sim_height_error_mean_m": 0.039
+  },
+  {
+   "mode": "LOITER",
+   "start_s": 201.6,
+   "length_s": 117.2,
+   "target_speed_mean_mps": 0.12,
+   "real_horizontal_error_mean_m": 0.327,
+   "real_horizontal_error_max_m": 1.04,
+   "real_height_error_mean_m": 0.079,
+   "network_sim_horizontal_error_mean_m": 0.105,
+   "network_sim_horizontal_error_max_m": 1.33,
+   "network_sim_height_error_mean_m": 0.036
+  },
+  {
+   "mode": "AUTO",
+   "start_s": 320.2,
+   "length_s": 40.3,
+   "target_speed_mean_mps": 1.41,
+   "real_horizontal_error_mean_m": 2.695,
+   "real_horizontal_error_max_m": 7.428,
+   "real_height_error_mean_m": 0.267,
+   "network_sim_horizontal_error_mean_m": 2.167,
+   "network_sim_horizontal_error_max_m": 7.156,
+   "network_sim_height_error_mean_m": 0.173
+  }
+ ]
+}

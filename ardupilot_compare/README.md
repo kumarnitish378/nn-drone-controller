@@ -50,6 +50,52 @@ That is a thin margin for real hardware.
 The hover heading figure in `results/stability.json` is not comparable: ArduPilot was still turning to its
 commanded heading during the hold.
 
+## Against a real flight log (`real_log_replay.py`)
+
+A real ArduCopter flight, not a simulation: an Erle-Copter quad (X frame, ArduCopter 3.3-dev) flown on
+5 December 2014, from the public repository https://github.com/erlerobot/logs (file
+`pxf/copter/5-12-2014/218.BIN`; 335 s with LOITER, GUIDED, AUTO and LAND). The log is not copied here; clone
+that repository to get it. 268 s of position-controlled flight were used.
+
+**1. Shadow replay (open loop).** At every instant the quad network is given what the real autopilot knew
+(gyro, accelerometer, attitude, position error to ArduPilot's own target, velocity) and its PWM is compared
+with the PWM ArduPilot really sent. The network is not flying the drone.
+
+| | Collective | Roll | Pitch | Yaw |
+|---|---|---|---|---|
+| Correlation, network PWM against ArduPilot PWM | 0.12 | 0.00 | 0.38 | 0.27 |
+| Size of the moving part, ArduPilot / network (us RMS) | 20 / 103 | 9 / 23 | 16 / 29 | 18 / 60 |
+| Correlation with ArduPilot's own attitude demand: ArduPilot / network | n/a | 0.42 / 0.40 | 0.54 / 0.66 | 0.33 / 0.68 |
+
+Moment by moment the two PWM streams do not match, and the network's commands are two to five times larger.
+But the network pushes toward the attitude ArduPilot was asking for about as consistently as ArduPilot's own
+motor commands do. Average PWM was 1698 us for the real drone and 1598 us for the network, which is the two
+airframes' different hover throttle, not a control difference.
+
+**2. Same target track, closed loop in our simulator.** The network follows the exact target positions
+ArduPilot was following.
+
+| Stretch | Real flight, mean distance from target | Network in simulator |
+|---|---|---|
+| LOITER, 29 s | 0.30 m | 0.26 m |
+| GUIDED, 82 s | 0.83 m | 0.36 m |
+| LOITER, 117 s | 0.33 m | 0.11 m |
+| AUTO, 40 s (target moving about 1.4 m/s) | 2.70 m | 2.17 m |
+
+This second table flatters the network: the real drone had real wind, GPS error and vibration, and the
+simulated one had no wind. It shows the network can follow a real mission's target track in simulation, not
+that it would beat ArduPilot outdoors.
+
+Assumptions: drone mass 1.5 kg (not in the log), battery voltage not logged so a neutral value is fed, the
+network's integral is held at zero in the open-loop replay, and log data (10 Hz attitude and PWM, 50 Hz IMU)
+is interpolated to the network's 93 Hz. The input builder is checked against our simulator first (it
+reproduces the simulator's motor outputs exactly), and every sign convention was probed.
+
+```
+git clone --depth 1 https://github.com/erlerobot/logs
+python3 real_log_replay.py logs/pxf/copter/5-12-2014/218.BIN out 1.5
+```
+
 ## Reading it fairly
 
 - **Two different simulators.** ArduPilot flew in SITL's physics and sensor models; the networks flew in
