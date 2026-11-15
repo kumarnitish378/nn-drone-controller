@@ -1,0 +1,83 @@
+{
+ "climb_2000m": {
+  "nominal_completed": true,
+  "nominal_time_to_2000m_s": 343.61,
+  "nominal_mission_time_s": 374.61,
+  "nominal_hold_error_at_2000m_m": 0.029198419314105245,
+  "climb_rate_near_ground_mps": 5.738313782417579,
+  "climb_rate_near_2000m_mps": 5.564416820796816,
+  "mean_pwm_climbing_near_ground": 1655.6340965169745,
+  "mean_pwm_climbing_near_2000m": 1713.3136551247703,
+  "mean_pwm_hover_at_2000m": 1676.7539134249091,
+  "max_altitude_m": 2000.8016232227396,
+  "robust_n": 200,
+  "robust_completed": 189,
+  "robust_crashed": 0,
+  "robust_hold_error_median_m": 0.03517494257843476
+ },
+ "mass_sweep": [
+  {
+   "mass_kg": 1,
+   "completed": 200,
+   "crashed": 0,
+   "n": 200,
+   "mission_time_median_s": 12.48,
+   "hold_error_median_m": 0.05174823076301767,
+   "max_tilt_p95_deg": 45.98067642703534
+  },
+  {
+   "mass_kg": 2,
+   "completed": 200,
+   "crashed": 0,
+   "n": 200,
+   "mission_time_median_s": 12.240448636813714,
+   "hold_error_median_m": 0.0777954502291091,
+   "max_tilt_p95_deg": 44.75329228168167
+  },
+  {
+   "mass_kg": 5,
+   "completed": 200,
+   "crashed": 0,
+   "n": 200,
+   "mission_time_median_s": 12.762766343475468,
+   "hold_error_median_m": 0.13519159851451593,
+   "max_tilt_p95_deg": 44.20960370558329
+  },
+  {
+   "mass_kg": 10,
+   "completed": 200,
+   "crashed": 0,
+   "n": 200,
+   "mission_time_median_s": 15.044942493126213,
+   "hold_error_median_m": 0.19103541200526836,
+   "max_tilt_p95_deg": 44.290887676064514
+  },
+  {
+   "mass_kg": 25,
+   "completed": 200,
+   "crashed": 0,
+   "n": 200,
+   "mission_time_median_s": 18.536139261975396,
+   "hold_error_median_m": 0.2889291468927409,
+   "max_tilt_p95_deg": 38.16077945764241
+  },
+  {
+   "mass_kg": 50,
+   "completed": 200,
+   "crashed": 0,
+   "n": 200,
+   "mission_time_median_s": 40.21107602181284,
+   "hold_error_median_m": 0.506109992239794,
+   "max_tilt_p95_deg": 29.61074111781615
+  },
+  {
+   "mass_kg": 100,
+   "completed": 200,
+   "crashed": 0,
+   "n": 200,
+   "mission_time_median_s": 51.684888213864895,
+   "hold_error_median_m": 0.7017779929864831,
+   "max_tilt_p95_deg": 23.368831020128233
+  }
+ ]
+}

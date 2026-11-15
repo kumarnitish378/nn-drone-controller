@@ -1,0 +1,117 @@
+{
+ "mass_kg": 4.0,
+ "speeds_mps": {
+  "horizontal": 3.5,
+  "climb": 3.0,
+  "descent": 1.8,
+  "final_landing": 0.5
+ },
+ "total_time_min": 43.48323522133846,
+ "pwm_sequence_standard_drone": {
+  "1 disarmed (0-1 s)": 1000.0,
+  "2 armed idle (1-3 s)": 1150.0,
+  "3 spool-up ramp (3-5 s) start/end": [
+   1151.910888671875,
+   1447.5894775390625
+  ],
+  "4 network takes over: first output per motor": [
+   1439.8031005859375,
+   1428.2833251953125,
+   1483.0062255859375,
+   1458.683349609375
+  ],
+  "5 lift-off time (s)": 5.4932557775416475,
+  "5 PWM at lift-off (mean)": 1768.444091796875,
+  "6 take-off peak PWM": 1792.2734375,
+  "7 hover at 50 m (mean)": 1608.1373291015625,
+  "8 final descent before touchdown (mean)": 1607.740234375,
+  "9 at touchdown per motor": [
+   1599.367431640625,
+   1592.042236328125,
+   1622.4879150390625,
+   1615.27294921875
+  ],
+  "10 lowest PWM while pressing down before detection": 1318.974365234375,
+  "11 at land detection per motor": [
+   1320.3917236328125,
+   1346.4093017578125,
+   1357.6436767578125,
+   1334.1534423828125
+  ],
+  "12 idle after ramp-down": 1150.0,
+  "13 disarmed": 1000.0
+ },
+ "standard": {
+  "crashed": false,
+  "touchdown_speed_mps": 0.5189695211065041,
+  "touchdown_offset_m": 0.008849099131333098,
+  "moved_before_takeoff_m": 1.990767390502276e-21,
+  "touchdown_to_detect_s": 1.4867068388762164,
+  "touchdown_to_disarm_s": 4.4979181481248816,
+  "WP1 hover 30 s: error at end (m)": 0.012901240028440952,
+  "WP2 hold: error at end (m)": 0.017915140837430954,
+  "WP3 hold: error at end (m)": 0.027251804247498512,
+  "WP4 hold: error at end (m)": 0.02644277550280094,
+  "WP5 hold: error at end (m)": 0.017926927655935287,
+  "WP6 hold: error at end (m)": 0.026953136548399925,
+  "hold 10 m above take-off point: error at end (m)": 0.018694134429097176,
+  "WP1 hover: max drift after first 10 s (m)": 0.04675816372036934,
+  "circle: mean / max distance from line (m)": [
+   0.13432456616210062,
+   0.29437782831116976
+  ],
+  "circle: max altitude error (m)": 0.47406005859375,
+  "rectangle: mean / max distance from outline (m)": [
+   0.15791182987099137,
+   0.32331508791501534
+  ],
+  "legs: mean / max distance behind moving target (m)": [
+   1.6431137323379517,
+   3.7095954418182373
+  ]
+ },
+ "randomised_100": {
+  "crashed": 0,
+  "landed": 100,
+  "disarmed": 100,
+  "lifted_off": 100,
+  "liftoff_time_min_max_s": [
+   5.405061304049006,
+   5.757839198019571
+  ],
+  "moved_before_takeoff_max_m": 0.016501073791332314,
+  "touchdown_speed_median_max_mps": [
+   0.5024055126426215,
+   0.5827360499073448
+  ],
+  "touchdown_offset_median_max_m": [
+   0.022908815054213515,
+   0.06868347248703768
+  ],
+  "touchdown_to_disarm_median_max_s": [
+   4.46012051662774,
+   4.5231165691225215
+  ],
+  "WP1 hover 30 s: error at end (m)": 0.01369958184659481,
+  "WP2 hold: error at end (m)": 0.01810503751039505,
+  "WP3 hold: error at end (m)": 0.03466736525297165,
+  "WP4 hold: error at end (m)": 0.026662681251764297,
+  "WP5 hold: error at end (m)": 0.023117221891880035,
+  "WP6 hold: error at end (m)": 0.027298973873257637,
+  "hold 10 m above take-off point: error at end (m)": 0.02636190503835678,
+  "WP1 hover: max drift after first 10 s (m)": 0.03974445164203644,
+  "circle: mean / max distance from line (m)": [
+   0.1520914988195035,
+   0.3400396271112669
+  ],
+  "circle: max altitude error (m)": 0.427215576171875,
+  "rectangle: mean / max distance from outline (m)": [
+   0.1971207619302695,
+   0.36418678101881674
+  ],
+  "legs: mean / max distance behind moving target (m)": [
+   1.726285457611084,
+   3.742672920227051
+  ]
+ }
+}

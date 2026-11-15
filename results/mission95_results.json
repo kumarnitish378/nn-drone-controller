@@ -1,0 +1,77 @@
+{
+ "mass_kg": 95.0,
+ "speeds_mps": {
+  "horizontal": 6.0,
+  "climb": 5.0,
+  "descent": 3.0,
+  "final_landing": 0.5
+ },
+ "mission_time_min": 26.749607958321725,
+ "standard": {
+  "crashed": false,
+  "landed": true,
+  "touchdown_speed_mps": 0.4977961230747517,
+  "touchdown_offset_m": 0.1240878188425669,
+  "lowest_point_during_takeoff_m": -0.0033395338105310425,
+  "max_tilt_deg": 19.15514047926472,
+  "max_climb_mps": 6.137355752356435,
+  "max_descent_mps": 3.3132189795421256,
+  "pwm_min": 1394.5806873962283,
+  "pwm_max": 1757.6460242271423,
+  "WP1 hover 30 s: error at end (m)": 0.06307244300842285,
+  "WP2 hold: error at end (m)": 0.11489217728376389,
+  "WP3 hold: error at end (m)": 0.270999550819397,
+  "WP4 hold: error at end (m)": 0.23750336468219757,
+  "WP5 hold: error at end (m)": 0.13334588706493378,
+  "WP6 hold: error at end (m)": 0.15266461670398712,
+  "hold 10 m above take-off point: error at end (m)": 0.10359523445367813,
+  "WP1 hover: max drift after first 10 s (m)": 0.25321829319000244,
+  "circle: mean / max distance from line (m)": [
+   0.42449449905358666,
+   0.9296339313934965
+  ],
+  "circle: max altitude error (m)": 1.363037109375,
+  "rectangle: mean / max distance from outline (m)": [
+   0.4500622058348045,
+   0.951934814453125
+  ],
+  "legs: mean / max distance behind moving target (m)": [
+   4.525404930114746,
+   10.649795532226562
+  ]
+ },
+ "randomised_100": {
+  "crashed": 0,
+  "landed": 100,
+  "touchdown_speed_median_max_mps": [
+   0.5002326306189857,
+   0.666864993479604
+  ],
+  "touchdown_offset_median_max_m": [
+   0.07707753734605355,
+   0.23177456209017155
+  ],
+  "lowest_point_during_takeoff_worst_m": -0.22955386755565463,
+  "WP1 hover 30 s: error at end (m)": 0.036842405796051025,
+  "WP2 hold: error at end (m)": 0.13213518261909485,
+  "WP3 hold: error at end (m)": 0.3158300220966339,
+  "WP4 hold: error at end (m)": 0.248498797416687,
+  "WP5 hold: error at end (m)": 0.18145811557769775,
+  "WP6 hold: error at end (m)": 0.21228742599487305,
+  "hold 10 m above take-off point: error at end (m)": 0.2036101371049881,
+  "WP1 hover: max drift after first 10 s (m)": 0.2936416268348694,
+  "circle: mean / max distance from line (m)": [
+   0.46742198145998104,
+   1.0016311181340427
+  ],
+  "circle: max altitude error (m)": 1.2457427978515625,
+  "rectangle: mean / max distance from outline (m)": [
+   0.5635998437100466,
+   1.109283447265625
+  ],
+  "legs: mean / max distance behind moving target (m)": [
+   4.785024642944336,
+   10.737908363342285
+  ]
+ }
+}
