@@ -4,7 +4,8 @@ from sim import MultirotorEnv, euler_from_quat, wrap, G
 from ppo import PPO
 
 weights = sys.argv[1] if len(sys.argv) > 1 and sys.argv[1].endswith(".npz") else "quad.npz"
-frame = sys.argv[2] if len(sys.argv) > 2 else "quad_x"
+import os
+frame = sys.argv[2] if len(sys.argv) > 2 else os.environ.get("NN_FRAME", "quad_x")
 ERR_CLIP = float(sys.argv[3]) if len(sys.argv) > 3 else 2.5
 
 # x, y, z (metres, relative to start), heading (deg)

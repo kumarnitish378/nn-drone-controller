@@ -14,6 +14,7 @@ Network interface
                             vehicle mass class(1): log10(nominal mass in kg) - 1
   outputs (n_motors):       value in [-1, 1]  ->  PWM = 1500 + 500 * value  (1000..2000 us)
 """
+import os
 import numpy as np
 
 G = 9.81
@@ -86,10 +87,11 @@ def wrap(a):
 
 
 class MultirotorEnv:
-    def __init__(self, n_envs=1, frame="quad_x", randomize=True, noise=True,
+    def __init__(self, n_envs=1, frame=None, randomize=True, noise=True,
                  episode_len=1000, seed=0, **overrides):
         self.cfg = dict(DEFAULTS, **overrides)
         self.N = n_envs
+        frame = frame or os.environ.get("NN_FRAME", "quad_x")   # NN_FRAME=hex_x selects the hexacopter
         self.frame = frame
         self.randomize = randomize
         self.noise = noise

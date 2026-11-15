@@ -108,8 +108,11 @@ def fly(n, randomize, seed, record=False):
         if S[k] == land_seg:
             td = np.isnan(t_td) & env.on_ground
             t_td[td] = t; td_off[td] = np.hypot(env.p[td, 0], env.p[td, 1])
-            # land detector (sensor-level): not moving vertically while the target is well below, for T_CONFIRM
-            cond = (phase == 0) & (np.abs(env.v[:, 2]) < 0.15) & (P[k, 2] < env.p[:, 2] - 0.5)
+            # land detector: not moving vertically while the target is well below, for T_CONFIRM,
+            # and with the network already commanding less than lift-off throttle (so a slow drone
+            # that is still hovering in the air can never be taken for landed)
+            cond = ((phase == 0) & (np.abs(env.v[:, 2]) < 0.15) & (P[k, 2] < env.p[:, 2] - 0.5)
+                    & (info["pwm"].mean(1) < PWM_SPOOL))
             confirm = np.where(cond, confirm + dt, 0.0)
             det = (phase == 0) & (confirm >= T_CONFIRM)
             phase[det] = 1; t_phase[det] = t; t_detect[det] = t; pwm_at_detect[det] = info["pwm"][det]
@@ -186,7 +189,7 @@ res = dict(mass_kg=MASS, speeds_mps=dict(horizontal=V_H, climb=V_UP, descent=V_D
 print(json.dumps(res, indent=1)); json.dump(res, open(f"{tag}_results.json", "w"), indent=1)
 
 import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
-C4 = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]; INK = "#0b0b0b"; SEC = "#52514e"; BG = "#fcfcfb"
+C4 = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]; INK = "#0b0b0b"; SEC = "#52514e"; BG = "#fcfcfb"
 plt.rcParams.update({"font.size": 10, "axes.edgecolor": "#c9c8c2", "axes.labelcolor": SEC, "xtick.color": SEC,
     "ytick.color": SEC, "axes.spines.top": False, "axes.spines.right": False, "axes.grid": True, "grid.color": "#e8e7e2",
     "grid.linewidth": 0.6, "figure.facecolor": BG, "axes.facecolor": BG, "axes.titlesize": 11, "axes.titleweight": "bold",
@@ -199,7 +202,7 @@ def panel(a, t0, t1, title, marks):
     a.set_ylim(950, 1900); a.set_title(title); a.set_xlabel("Time (s)")
     for x, lab in marks:
         a.axvline(x - t0, color=SEC, lw=0.8, ls=":"); a.text(x - t0 + 0.08, 1880, lab, rotation=90, va="top", ha="left", color=SEC, fontsize=9)
-    a.legend(frameon=False, ncol=4, loc="lower center")
+    a.legend(frameon=False, ncol=4 if pf.shape[1] <= 4 else 3, loc="lower center")
 panel(ax[0], 0, 14, "Start: disarmed to take-off, actual PWM per motor (µs)",
       [(0, "disarmed"), (T_OFF, "armed, idle"), (T_OFF + T_IDLE, "spool-up"), (T0, "network in control"), (nom["t_liftoff"][0], "lift-off")])
 td, de, di = nom["t_td"][0], nom["t_detect"][0], nom["t_disarm"][0]
@@ -207,7 +210,7 @@ panel(ax[1], td - 6, di + 2, "End: landing to disarm, actual PWM per motor (µs)
       [(td, "touchdown"), (de, "landing detected"), (de + T_RAMP, "idle"), (di, "disarmed")])
 a = ax[2]
 for i in range(rec["pwm"].shape[1]): a.plot(t, rec["pwm"][:, i], color=C4[i], lw=0.8, label=f"Motor {i+1}")
-a.set_ylim(950, 1900); a.set_title("Whole mission: actual PWM per motor (µs)"); a.set_xlabel("Time (minutes)"); a.legend(frameon=False, ncol=4, loc="lower center")
+a.set_ylim(950, 1900); a.set_title("Whole mission: actual PWM per motor (µs)"); a.set_xlabel("Time (minutes)"); a.legend(frameon=False, ncol=4 if pf.shape[1] <= 4 else 3, loc="lower center")
 a = ax[3]; a.plot(t, rec["tgt"][:, 2], "--", color=SEC, lw=1, label="Target"); a.plot(t, rec["p"][:, 2], color=C4[0], lw=2, label="Actual")
 a.set_title("Height (m)"); a.set_xlabel("Time (minutes)"); a.legend(frameon=False, loc="upper left")
 fig.tight_layout(h_pad=2); fig.savefig(f"{tag}_results.png", dpi=130)

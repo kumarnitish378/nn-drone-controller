@@ -4,9 +4,17 @@ An experiment: a small neural network that flies a multirotor by driving the mot
 (1000–2000 µs), with no PID loops. Everything here is **simulation only** — a simplified rigid-body
 simulator written for this experiment, not ArduPilot SITL, and nothing has flown on real hardware.
 
+Two trained networks are included:
+
+| Frame | Weights | Shape | How it was trained |
+|---|---|---|---|
+| Quad X | `quad_x_policy_v4.npz` | 61 → 64 → 64 → 4 | PPO from scratch (21 inputs), then extended and fine-tuned in stages |
+| Hexa X | `hex_x_policy_v1.npz` | 67 → 64 → 64 → 6 | PPO from scratch in one go, 98 million samples |
+
 ## The network
 
-`61 → 64 → 64 → 4`, tanh activations. Output −1..1 per motor, mapped to `PWM = 1500 + 500 × output`.
+Quad: `61 → 64 → 64 → 4`, hex: `67 → 64 → 64 → 6`, tanh activations. Output −1..1 per motor, mapped to
+`PWM = 1500 + 500 × output`. Motor order follows ArduPilot's QUAD X / HEXA X numbering.
 
 Inputs (quad): gyro (3), accelerometer (3), roll and pitch (2), heading error as sin/cos (2),
 position error to the target in the body frame (3), velocity (3), battery voltage (1),
@@ -23,7 +31,7 @@ Two things around the network are hand-designed, not learned:
 - **Integral input weights** – initially set by hand to 0.15 × the position-error weights
   (Ki = 0.5 /s), then fine-tuned by PPO.
 
-## Results (v4 weights, simulation)
+## Results: quad (v4 weights, simulation)
 
 | Test | Result |
 |---|---|
@@ -38,6 +46,33 @@ Two things around the network are hand-designed, not learned:
 
 Charts and raw numbers are in `results/`.
 
+## Results: hexacopter (`hex_x_policy_v1.npz`, simulation)
+
+Same test cases, same randomisation. Select the frame with `NN_FRAME=hex_x`.
+
+| Test | Result |
+|---|---|
+| Square waypoint mission, 500 randomised 1 kg drones | 500 completed, 0 crashed |
+| 20 m / 30 m altitude mission, 500 drones | 500 completed, 0 crashed |
+| Climb to 2000 m, 200 drones | 0 crashed, 187 finished within 10 min |
+| Mass sweep 1–100 kg (200 drones each) | 0 crashed; completed 200, 200, 199, 199, 197, 194, 189 |
+| Hover error 6–8 s after arrival | 0.04 m at 1 kg, 0.10 m at 10 kg, 0.25 m at 100 kg |
+| 5 m radius circle, 1 kg | 0.06 m from the line on average |
+| 50 m radius circle at 1200 m, 95 kg | 0.47 m from the line on average |
+| Six-waypoint mission, 95 kg and 4 kg (100 drones each) | all landed, 0 crashed |
+| Same mission from disarmed to disarmed, 4 kg | all took off, landed and disarmed, 0 crashed |
+
+Charts and raw numbers are in `results/hex_x/`.
+
+Hex-specific problems:
+
+- **Uneven hover throttle:** in hover the six motors sit at three different levels (about 1800, 1670
+  and 1310 µs in pairs) instead of all near the same value. It flies, but wastes power and leaves
+  less headroom, which is why heavy or weak drones climb slowly and some do not finish in time.
+- **Aggressive:** up to 47° tilt on the square mission (55° for the 95th percentile drone).
+- The mass-class input was constant during training, so its weight is folded into the bias (unused).
+- No yaw wobble on climb-out, unlike the quad.
+
 ## Known problems
 
 - **Yaw wobble on climb-out:** diagonal motor pairs swing about ±100 µs for several seconds after lift-off.
@@ -46,6 +81,8 @@ Charts and raw numbers are in `results/`.
 - **Training that did not work:** from-scratch runs with the 61-input network never learned to fly;
   several fine-tuning runs made flight worse and were discarded. v4 is the v3 weights plus the
   hand-designed changes above.
+- **Landing detector:** `mission_full.py` now also requires low throttle before declaring a landing;
+  the first version could trigger on a slow drone still hovering, which then fell from 10 m.
 - **Simulator limits:** simple ground (no bounce, tipping or ground effect), no battery drain,
   no stronger wind at altitude, and the 100 kg results assume a scaled-up airframe with the same
   thrust-to-weight ratio.
@@ -65,7 +102,8 @@ Charts and raw numbers are in `results/`.
 | `mission.py` | Six-waypoint mission (no ground) |
 | `mission_full.py` | Same mission from disarmed to disarmed on solid ground |
 | `plot.py` | Chart for the square missions |
-| `quad_x_policy_v4.npz` | Trained weights (`pi_W0..2`, `pi_b0..2` are the flight network) |
+| `quad_x_policy_v4.npz`, `hex_x_policy_v1.npz` | Trained weights (`pi_W0..2`, `pi_b0..2` are the flight network) |
+| `quad_log.json`, `hex_log.json` | Training curves |
 | `v1/`, `v2/`, `v3/` | Earlier versions |
 
 ## Running
@@ -80,6 +118,17 @@ python3 circle.py quad_x_policy_v4.npz 2.5 big 50 4 95 1200 30 # radius, speed, 
 python3 envelope.py quad_x_policy_v4.npz 2.5 envelope_v4       # 2000 m climb + mass sweep
 python3 mission_full.py quad_x_policy_v4.npz m4 4 3.5 3 1.8    # mass, horizontal / climb / descent speed
 ```
+
+Hexacopter: put `NN_FRAME=hex_x` in front and use the hex weights, for example
+
+```
+NN_FRAME=hex_x python3 evaluate.py hex_x_policy_v1.npz hex_x 2.5
+NN_FRAME=hex_x python3 mission_full.py hex_x_policy_v1.npz m4 4 3.5 3 1.8
+python3 train.py --frame hex_x --minutes 9 --out hex --cfg '{"w_da2":0.3,"w_da1":0.0,"w_tilt":0.0,"w_spd":0.03,"spd_free":4.0,"err_clip":5.0,"p_moving":0.0}'
+```
+
+The last line is the configuration that trained the hex network (repeat with `--resume hex.npz`
+until about 100 million samples, on a 1 kg drone at sea level).
 
 `2.5` is the limit (in size-normalised metres) on the position error fed to the network; lower
 means slower, gentler flight.
