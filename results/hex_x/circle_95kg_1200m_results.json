@@ -1,0 +1,18 @@
+{
+ "radius_m": 50.0,
+ "altitude_asl_m": 1200.0,
+ "mass_kg": 95.0,
+ "speed_mps": 4.0,
+ "lap_time_s": 78.5,
+ "nominal_radial_error_mean_m": 0.46741348056142495,
+ "nominal_radial_error_max_m": 0.7141579736795762,
+ "nominal_altitude_error_max_m": 0.6892336276519764,
+ "nominal_lag_behind_target_m": 6.716579470817601,
+ "nominal_final_hold_error_m": 0.0945007341138386,
+ "robust_crashed": 0,
+ "robust_radial_error_mean_median_m": 0.5612111195406864,
+ "robust_radial_error_max_p95_m": 1.9144065916419946,
+ "robust_radial_error_max_worst_m": 2.66869383110204,
+ "robust_altitude_error_max_p95_m": 1.043732878072457,
+ "max_tilt_deg": 35.26605119663242
+}

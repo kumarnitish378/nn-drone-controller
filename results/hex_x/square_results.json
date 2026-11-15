@@ -1,0 +1,23 @@
+{
+ "nominal_completed": true,
+ "nominal_mission_time_s": 11.58,
+ "nominal_final_hold_error_m": 0.035620664133652745,
+ "robust_n": 500,
+ "robust_completed": 500,
+ "robust_crashed": 0,
+ "robust_timeout": 0,
+ "robust_mission_time_median_s": 11.700000000000001,
+ "robust_hold_error_median_m": 0.04203952869003669,
+ "robust_hold_error_p95_m": 0.11498266641736948,
+ "robust_hold_error_max_m": 0.19034031790879935,
+ "robust_max_tilt_p95_deg": 55.34558184944421,
+ "pwm_min": 1110.8202636241913,
+ "pwm_max": 1948.227345943451,
+ "pwm_hover_mean": 1577.217069764932,
+ "pwm_jitter_hover_us": 4.340606905407642,
+ "max_tilt_deg": 46.99134063293256,
+ "max_climb_rate_mps": 3.394567201258724,
+ "max_descent_rate_mps": 3.0134226942150235,
+ "max_altitude_overshoot_m": 0.7514446119801335,
+ "level_flight_altitude_error_mean_m": 0.1060876757913187
+}

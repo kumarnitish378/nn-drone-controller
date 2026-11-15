@@ -56,7 +56,7 @@ out = dict(radius_m=R, altitude_asl_m=ASL, mass_kg=MASS, speed_mps=SPEED, lap_ti
 print(json.dumps(out, indent=1)); json.dump(out, open(f"{tag}_results.json", "w"), indent=1)
 
 import matplotlib; matplotlib.use("Agg"); import matplotlib.pyplot as plt
-C = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]; INK = "#0b0b0b"; SEC = "#52514e"; BG = "#fcfcfb"
+C = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]; INK = "#0b0b0b"; SEC = "#52514e"; BG = "#fcfcfb"
 plt.rcParams.update({"font.size": 10, "axes.edgecolor": "#c9c8c2", "axes.labelcolor": SEC, "xtick.color": SEC,
     "ytick.color": SEC, "axes.spines.top": False, "axes.spines.right": False, "axes.grid": True, "grid.color": "#e8e7e2",
     "grid.linewidth": 0.6, "figure.facecolor": BG, "axes.facecolor": BG, "axes.titlesize": 11, "axes.titleweight": "bold",
@@ -75,5 +75,5 @@ a = ax[2]; a.plot(t, ALT0 + rec["tgt"][:, 2], "--", color=SEC, lw=1, label="Targ
 a.set_title("Altitude above sea level (m)"); a.ticklabel_format(useOffset=False); a.legend(frameon=False, loc="lower right")
 a = ax[3]
 for i in range(rec["pwm"].shape[1]): a.plot(t, rec["pwm"][:, i], color=C[i], lw=1.2, label=f"Motor {i+1}")
-a.set_ylim(1000, 2000); a.set_title("Network output: motor PWM (µs)"); a.set_xlabel("Time (s)"); a.legend(frameon=False, ncol=4, loc="lower center")
+a.set_ylim(1000, 2000); a.set_title("Network output: motor PWM (µs)"); a.set_xlabel("Time (s)"); a.legend(frameon=False, ncol=4 if rec["pwm"].shape[1] <= 4 else 3, loc="lower center")
 fig.tight_layout(h_pad=2); fig.savefig(f"{tag}_results.png", dpi=130)

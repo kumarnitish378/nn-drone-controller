@@ -138,7 +138,7 @@ plt.rcParams.update({"font.size": 10, "axes.edgecolor": "#c9c8c2", "axes.labelco
     "grid.linewidth": 0.6, "figure.facecolor": BG, "axes.facecolor": BG, "axes.titlesize": 11, "axes.titleweight": "bold",
     "axes.titlelocation": "left", "axes.titlecolor": INK})
 rec = nom["rec"]; t = rec["t"] / 60; p = rec["p"]; tg = rec["tgt"]
-C4 = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]
+C4 = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300"]
 fig, ax = plt.subplots(7, 1, figsize=(7, 29), gridspec_kw=dict(height_ratios=[1.6, 1.2, 1, 1, 1.1, 1.1, 1.1]))
 a = ax[0]; a.plot(tg[:, 1], tg[:, 2], "--", color=SEC, lw=1, label="Planned"); a.plot(p[:, 1], p[:, 2], color=C[0], lw=2, label="Flown")
 for nme, w in [("WP1", WP1), ("WP2", WP2), ("WP3", WP3), ("WP4", WP4), ("WP5", WP5), ("WP6", WP6)]:
@@ -153,12 +153,12 @@ a.set_title("Height (m)"); a.legend(frameon=False, loc="upper left")
 a = ax[3]; a.plot(t, np.linalg.norm(tg - p, axis=1), color=C[0], lw=1.5); a.set_title("Distance from the moving target point (m)")
 a = ax[4]
 for i in range(rec["pwm"].shape[1]): a.plot(t, rec["pwm"][:, i], color=C4[i], lw=0.8, label=f"Motor {i+1}")
-a.set_ylim(1000, 2000); a.set_title("Actual PWM sent to each motor (µs), whole mission"); a.set_xlabel("Time (minutes)"); a.legend(frameon=False, ncol=4, loc="lower center")
+a.set_ylim(1000, 2000); a.set_title("Actual PWM sent to each motor (µs), whole mission"); a.set_xlabel("Time (minutes)"); a.legend(frameon=False, ncol=4 if rec["pwm"].shape[1] <= 4 else 3, loc="lower center")
 pf = nom["pwm_full"]; dtn = nom["dt"]; tf = np.arange(1, len(pf) + 1) * dtn
 def zoom(a, t0, t1, title):
     m = (tf >= t0) & (tf <= t1)
     for i in range(pf.shape[1]): a.plot(tf[m] - t0, pf[m, i], color=C4[i], lw=1.2, label=f"Motor {i+1}")
-    a.set_title(title); a.set_xlabel("Time (s)"); a.legend(frameon=False, ncol=4, loc="lower center")
+    a.set_title(title); a.set_xlabel("Time (s)"); a.legend(frameon=False, ncol=4 if pf.shape[1] <= 4 else 3, loc="lower center")
     lo, hi = pf[m].min(), pf[m].max(); a.set_ylim(max(1000, lo - 0.35 * (hi - lo) - 20), min(2000, hi + 20))
 zoom(ax[5], 0, 12, "Actual PWM, zoom: first 12 s (take-off)")
 k0 = np.nonzero(nom["S"] == nom["names"].index("circle lap"))[0][0] * dtn
