@@ -105,6 +105,8 @@ Hex-specific problems:
 | `mission.py` | Six-waypoint mission (no ground) |
 | `mission_full.py` | Same mission from disarmed to disarmed on solid ground |
 | `plot.py` | Chart for the square missions |
+| `mavlink_sim.py` | Real-time simulator with a MAVLink link for QGroundControl / Mission Planner |
+| `test_mavlink.py` | Scripted ground-station test for the MAVLink link |
 | `quad_x_policy_v4.npz`, `hex_x_policy_v1.npz` | Trained weights (`pi_W0..2`, `pi_b0..2` are the flight network) |
 | `quad_log.json`, `hex_log.json` | Training curves |
 | `v1/`, `v2/`, `v3/` | Earlier versions |
@@ -120,6 +122,38 @@ Hex-specific problems:
    `float` arrays, and a model card with the test report.
 
 Model size (flight network only): quad 8,388 parameters (33.6 kB as float32), hex 8,902 parameters (35.6 kB).
+## Ground station link (QGroundControl / Mission Planner)
+
+`mavlink_sim.py` runs the simulator in real time and speaks MAVLink, so a ground station can change
+parameters, upload missions and fly them. It announces itself as an ArduCopter-type vehicle so the
+usual flight modes appear, but it is not ArduPilot: the network in this repository flies it.
+
+```
+pip install -r requirements.txt
+python3 mavlink_sim.py                           # 1 kg quad, sends to UDP 14550 on this PC
+python3 mavlink_sim.py --frame hex_x --mass 95   # 95 kg hexacopter
+python3 mavlink_sim.py --gcs 192.168.1.20:14550 --home 28.5355,77.3910,200 --speedup 5
+```
+
+Start QGroundControl (it listens on UDP 14550 by default) or connect Mission Planner with UDP 14550.
+
+- **Modes:** GUIDED, AUTO, LOITER, RTL, LAND.
+- **Mission commands:** TAKEOFF, WAYPOINT (with hold time), LOITER_TURNS (circle with radius), LOITER_TIME,
+  LOITER_UNLIM, RETURN_TO_LAUNCH, LAND, DO_CHANGE_SPEED, DO_JUMP. Anything else is skipped with a message.
+- **Drone parameters** (change while disarmed): `SIM_MASS` (kg), `SIM_TW_RATIO`, `SIM_BATT_VOLT`,
+  `SIM_WIND_SPD`, `SIM_WIND_DIR`, `SIM_NOISE`, `SIM_SPEEDUP`, `NN_ERR_CLIP`. The frame (quad or hex) is
+  chosen with `--frame` at start.
+- **Navigation parameters** (ArduCopter names and units): `WPNAV_SPEED`, `WPNAV_SPEED_UP`, `WPNAV_SPEED_DN`,
+  `WPNAV_RADIUS`, `LAND_SPEED`, `LAND_ALT_LOW`, `RTL_ALT`, `CIRCLE_RADIUS`, `WP_YAW_BEHAVIOR`, `MOT_SPIN_ARM`,
+  `DISARM_DELAY`. Speed defaults scale with mass; if you set them much higher the drone falls behind the path.
+- **Telemetry:** position, attitude, GPS, battery voltage, mission progress and the actual motor PWM
+  (`SERVO_OUTPUT_RAW`, outputs 1-4 or 1-6).
+
+`test_mavlink.py [quad_x|hex_x] [mass]` is a scripted ground station that downloads and sets parameters,
+uploads and reads back a mission, flies it in AUTO, then does a GUIDED take-off, go-to and land. It passes
+for a 1 kg quad, a 4 kg quad and a 95 kg hexacopter. **It has not been tried with the real QGroundControl
+or Mission Planner yet**; they send more requests than the script does, so expect some rough edges.
+No RC or joystick input, no fence or rally points, and battery percentage is not estimated.
 
 ## Running
 
