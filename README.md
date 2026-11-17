@@ -8,8 +8,8 @@ Two trained networks are included:
 
 | Frame | Weights | Shape | How it was trained |
 |---|---|---|---|
-| Quad X | `quad_x_policy_v4.npz` | 61 → 64 → 64 → 4 | PPO from scratch (21 inputs), then extended and fine-tuned in stages |
-| Hexa X | `hex_x_policy_v1.npz` | 67 → 64 → 64 → 6 | PPO from scratch in one go, 98 million samples |
+| Quad X | `models/quad_x_policy_v4.npz` | 61 → 64 → 64 → 4 | PPO from scratch (21 inputs), then extended and fine-tuned in stages |
+| Hexa X | `models/hex_x_policy_v1.npz` | 67 → 64 → 64 → 6 | PPO from scratch in one go, 98 million samples |
 
 ## The network
 
@@ -21,7 +21,7 @@ position error to the target in the body frame (3), velocity (3), battery voltag
 previous motor outputs (4), integrated position error (3), the two previous frames of the
 sensor and output values (36), and a mass-class input (1, currently unused: zero weights).
 
-Trained with PPO (written in plain NumPy, `ppo.py`) on randomised drones: mass, inertia, motor
+Trained with PPO (PyTorch, `nn_drone/training/`; it trains on an NVIDIA GPU when one is available) on randomised drones: mass, inertia, motor
 strength and lag, battery voltage, wind and sensor noise.
 
 Two things around the network are hand-designed, not learned:
@@ -44,11 +44,11 @@ Two things around the network are hand-designed, not learned:
 | 50 m radius circle at 1200 m, 95 kg | 0.72 m from the line on average |
 | Six-waypoint mission to 1500 m with circle, rectangle and landing | completed at 95 kg and 4 kg |
 
-Charts and raw numbers are in `results/`.
+Charts and raw numbers are in `results/quad_x/`.
 
 ## Results: hexacopter (`hex_x_policy_v1.npz`, simulation)
 
-Same test cases, same randomisation. Select the frame with `NN_FRAME=hex_x`.
+Same test cases, same randomisation. Select the frame with `--frame hex_x`.
 
 | Test | Result |
 |---|---|
@@ -92,61 +92,76 @@ and finished the mission sooner. The two sides ran in different simulators; see 
 - **Training that did not work:** from-scratch runs with the 61-input network never learned to fly;
   several fine-tuning runs made flight worse and were discarded. v4 is the v3 weights plus the
   hand-designed changes above.
-- **Landing detector:** `mission_full.py` now also requires low throttle before declaring a landing;
+- **Landing detector:** the full mission (`full-mission`) now also requires low throttle before declaring a landing;
   the first version could trigger on a slow drone still hovering, which then fell from 10 m.
 - **Simulator limits:** simple ground (no bounce, tipping or ground effect), no battery drain,
   no stronger wind at altitude, and the 100 kg results assume a scaled-up airframe with the same
   thrust-to-weight ratio.
-- The `evaluate.py` in `v1/`–`v3/` has a timing bug (it stopped the clock one waypoint early);
-  use the top-level `evaluate.py` to re-measure old weights.
+- The evaluation scripts of the first three versions had a timing bug (they stopped the clock one waypoint
+  early). Those versions now live on as simulator profiles v1–v3 (see below) and are measured with the current
+  flight tests.
 
-## Files
+## Code layout
 
-| File | Purpose |
+Everything is one Python package, `nn_drone`, driven from one command line: `python -m nn_drone <command> --help`.
+
+| Package | Purpose |
 |---|---|
-| `sim.py` | Simulator: quad X / hex X frames, motors, battery, air density, size scaling, ground, observations, reward |
-| `ppo.py` | Network and PPO in NumPy, with optional action-smoothness regularisers |
-| `train.py` | Training script |
-| `evaluate.py` | Square mission and 20/30 m mission |
-| `circle.py` | Circle mission |
-| `envelope.py` | 2000 m climb and 1–100 kg sweep |
-| `mission.py` | Six-waypoint mission (no ground) |
-| `mission_full.py` | Same mission from disarmed to disarmed on solid ground |
-| `plot.py` | Chart for the square missions |
-| `ardupilot_compare/` | Same mission in ArduCopter SITL and with the networks; log extraction and comparison |
-| `web/` | 3D web tool: `index.html` (built), `core.js`, `template.html`, `build.py`, `test_core.py` |
-| `mavlink_sim.py` | Real-time simulator with a MAVLink link for QGroundControl / Mission Planner |
-| `test_mavlink.py` | Scripted ground-station test for the MAVLink link |
-| `quad_x_policy_v4.npz`, `hex_x_policy_v1.npz` | Trained weights (`pi_W0..2`, `pi_b0..2` are the flight network) |
-| `quad_log.json`, `hex_log.json` | Training curves |
-| `v1/`, `v2/`, `v3/` | Earlier versions |
+| `nn_drone/simulation/` | Batched simulator: motor layouts, airframe randomisation and size scaling, rigid-body physics, network inputs, position-error integrator, reward, training targets |
+| `nn_drone/policy/` | PyTorch networks, weights files (`.npz`), and `NeuralPilot`, which flies a simulated drone with a trained network |
+| `nn_drone/training/` | PPO with optional action-smoothness regularisers, rollout collection, the training loop |
+| `nn_drone/flight_tests/` | Square / high mission, circle, envelope, the six-waypoint mission in the air and from disarmed to disarmed, landing detection, the CI gate |
+| `nn_drone/ground_link/` | MAVLink link for QGroundControl / Mission Planner: parameters, navigation, flight modes and missions, the server, a scripted ground station |
+| `nn_drone/ardupilot_comparison/` | Same mission in ArduCopter SITL and with the networks; log reading, metrics, stability checks, real-log replay ([docs](docs/ardupilot_comparison.md)) |
+| `nn_drone/export/` | Model package (`.npz`, C header, model card) and the web page build |
+| `nn_drone/charts/` | Charts for all of the above |
+| `models/` | Trained weights and training curves; `models/legacy/` holds the v1–v3 quad networks |
+| `results/` | Charts and raw numbers: `quad_x/`, `hex_x/`, `ardupilot_comparison/` |
+| `web/` | 3D web tool: `index.html` (built), `core.js`, `template.html` |
+| `tests/` | The simulator, networks and PPO checked step for step against the original implementation, and the web core against Python |
+
+### Simulator profiles
+
+The experiment went through four simulator generations. Each weights file records the one it was trained in
+(`simulator_profile`), and the tools fly it there, so old networks behave exactly as they did:
+
+| Profile | Adds | Network |
+|---|---|---|
+| v1 | sensors, battery, previous motor outputs (21 inputs for a quad) | `models/legacy/quad_x_v1.npz` |
+| v2 | integrated position error (24 inputs) | `models/legacy/quad_x_v2.npz` |
+| v3 | two previous frames, moving targets, smoothness rewards (60 inputs) | `models/legacy/quad_x_v3.npz` |
+| v4 | size scaling to 100 kg, thinner air with altitude, solid ground, mass-class input (61 inputs) | `models/quad_x_policy_v4.npz`, `models/hex_x_policy_v1.npz` |
+
+Weights files are shared with the C header export and the web tool: `pi_W0..2`, `pi_b0..2` are the flight
+network, stored [inputs][outputs].
 
 ## CI: tested model as the output
 
 `.github/workflows/ci.yml` runs on every push and pull request. A third job checks the ground station link
 and the web tool. The model jobs run once per frame:
 
-1. `ci_test.py` runs the test cases (square mission, the same at 2000 m, 10 kg and 100 kg drones,
+1. `python -m nn_drone ci-gate` runs the test cases (square mission, the same at 2000 m, 10 kg and 100 kg drones,
    the circle, and the six-waypoint mission from disarmed to disarmed) and fails if any limit is missed.
-2. Only if all of them pass, `export_model.py` packages the flight network and the workflow uploads it
+2. Only if all of them pass, `python -m nn_drone export-model` packages the flight network and the workflow uploads it
    as the artifact `model-quad_x` / `model-hex_x`: weights (`.npz`), a C header with the weights as
    `float` arrays, and a model card with the test report.
 
 Model size (flight network only): quad 8,388 parameters (33.6 kB as float32), hex 8,902 parameters (35.6 kB).
 ## Ground station link (QGroundControl / Mission Planner)
 
-`mavlink_sim.py` runs the simulator in real time and speaks MAVLink, so a ground station can change
+`python -m nn_drone ground-link` runs the simulator in real time and speaks MAVLink, so a ground station can change
 parameters, upload missions and fly them. It announces itself as an ArduCopter-type vehicle so the
 usual flight modes appear, but it is not ArduPilot: the network in this repository flies it.
 
 ```
 pip install -r requirements.txt
-python3 mavlink_sim.py                           # 1 kg quad, sends to UDP 14550 on this PC
-python3 mavlink_sim.py --frame hex_x --mass 95   # 95 kg hexacopter
-python3 mavlink_sim.py --gcs 192.168.1.20:14550 --home 28.5355,77.3910,200 --speedup 5
+python -m nn_drone ground-link                           # 1 kg quad, sends to UDP 14550 on this PC
+python -m nn_drone ground-link --frame hex_x --mass 95   # 95 kg hexacopter
+python -m nn_drone ground-link --gcs 192.168.1.20:14550 --home 28.5355,77.3910,200 --speedup 5
 ```
 
-Start QGroundControl (it listens on UDP 14550 by default) or connect Mission Planner with UDP 14550.
+Start QGroundControl or Mission Planner: both listen on UDP 14550 and connect on their own when the first
+heartbeat arrives (in Mission Planner do not press Connect for UDP 14550; it is already listening).
 
 - **Modes:** GUIDED, AUTO, LOITER, RTL, LAND.
 - **Mission commands:** TAKEOFF, WAYPOINT (with hold time), LOITER_TURNS (circle with radius), LOITER_TIME,
@@ -160,7 +175,7 @@ Start QGroundControl (it listens on UDP 14550 by default) or connect Mission Pla
 - **Telemetry:** position, attitude, GPS, battery voltage, mission progress and the actual motor PWM
   (`SERVO_OUTPUT_RAW`, outputs 1-4 or 1-6).
 
-`test_mavlink.py [quad_x|hex_x] [mass]` is a scripted ground station that downloads and sets parameters,
+`python -m nn_drone ground-link-test --frame quad_x --mass 4` is a scripted ground station that downloads and sets parameters,
 uploads and reads back a mission, flies it in AUTO, then does a GUIDED take-off, go-to and land. It passes
 for a 1 kg quad, a 4 kg quad and a 95 kg hexacopter. **It has not been tried with the real QGroundControl
 or Mission Planner yet**; they send more requests than the script does, so expect some rough edges.
@@ -176,34 +191,38 @@ simulator and both networks run inside the browser, so it needs no Python: open 
 - Drone: quad or hexa, mass 0.5-100 kg, thrust-to-weight, battery, wind, field elevation, sensor noise, speeds.
 - Watch: the planned route and flown track in 3D, per-motor PWM bars and chart, and a flight record.
 
-`web/core.js` is a port of `sim.py` and of the flight logic in `mavlink_sim.py`; `web/test_core.py` flies the
+`web/core.js` is a port of the simulator and of the ground-link flight logic; `tests/test_web_core.py` flies the
 same mission in both and checks the tracks agree (they do, to within 5 cm for a 4 kg quad and 12 cm for a
-95 kg hexacopter, with identical step counts). Rebuild the page with `python3 web/build.py` after changing
+95 kg hexacopter, with identical step counts). Rebuild the page with `python -m nn_drone build-web` after changing
 `web/core.js`, `web/template.html` or the weights.
 
 ## Running
 
-Needs Python 3 with `numpy` and `matplotlib`.
+Needs Python 3.10+ with the packages in `requirements.txt`. For GPU training install the CUDA build of PyTorch
+(for example `pip install torch --index-url https://download.pytorch.org/whl/cu128`).
 
 ```
-python3 evaluate.py quad_x_policy_v4.npz quad_x 2.5            # square mission
-python3 evaluate.py quad_x_policy_v4.npz quad_x 2.5 high       # 20 m / 30 m mission
-python3 circle.py quad_x_policy_v4.npz 2.5 circle_v4           # 5 m circle, 1 kg
-python3 circle.py quad_x_policy_v4.npz 2.5 big 50 4 95 1200 30 # radius, speed, mass, altitude, approach time
-python3 envelope.py quad_x_policy_v4.npz 2.5 envelope_v4       # 2000 m climb + mass sweep
-python3 mission_full.py quad_x_policy_v4.npz m4 4 3.5 3 1.8    # mass, horizontal / climb / descent speed
+python -m nn_drone square-mission                                  # square mission, quad
+python -m nn_drone square-mission --high                           # 20 m / 30 m mission
+python -m nn_drone circle --tag circle_v4                          # 5 m circle, 1 kg
+python -m nn_drone circle --tag big --radius 50 --speed 4 --mass 95 --altitude 1200 --approach-time 30
+python -m nn_drone envelope --tag envelope_v4                      # 2000 m climb + mass sweep
+python -m nn_drone full-mission --tag m4 --mass 4 --horizontal-speed 3.5 --climb-speed 3 --descent-speed 1.8
+python -m nn_drone ci-gate --frame hex_x                           # every CI test case
+python -m pytest                                                   # equivalence and unit tests
 ```
 
-Hexacopter: put `NN_FRAME=hex_x` in front and use the hex weights, for example
+Hexacopter: add `--frame hex_x`; another network: `--weights path.npz`. Training:
 
 ```
-NN_FRAME=hex_x python3 evaluate.py hex_x_policy_v1.npz hex_x 2.5
-NN_FRAME=hex_x python3 mission_full.py hex_x_policy_v1.npz m4 4 3.5 3 1.8
-python3 train.py --frame hex_x --minutes 9 --out hex --cfg '{"w_da2":0.3,"w_da1":0.0,"w_tilt":0.0,"w_spd":0.03,"spd_free":4.0,"err_clip":5.0,"p_moving":0.0}'
+python -m nn_drone train --frame hex_x --minutes 9 --output hex --config '{"position_error_clip_m": 5.0, "moving_target_share": 0.0, "reward": {"action_change_squared": 0.3, "action_change_absolute": 0.0, "excess_tilt": 0.0, "excess_speed": 0.03, "free_speed": 4.0}}'
 ```
 
-The last line is the configuration that trained the hex network (repeat with `--resume hex.npz`
-until about 100 million samples, on a 1 kg drone at sea level).
+That is the configuration that trained the hex network (repeat with `--resume hex.npz` until about 100 million
+samples, on a 1 kg drone at sea level). `--device` picks `cuda` or `cpu` (default: the GPU when PyTorch sees
+one); on an RTX 4050 laptop GPU 60 iterations of 1024 drones x 128 steps took about 50 s, against about 250 s
+for the original NumPy trainer on the CPU, with the same learning curve. `--profile v1`...`v3` trains in an older
+simulator generation.
 
-`2.5` is the limit (in size-normalised metres) on the position error fed to the network; lower
+`--error-clip 2.5` is the limit (in size-normalised metres) on the position error fed to the network; lower
 means slower, gentler flight.

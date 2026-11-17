@@ -1,0 +1,18 @@
+[project]
+name = "nn-drone"
+version = "0.5.0"
+description = "Neural-network multirotor flight control: simulator, PPO training (PyTorch), flight tests and a MAVLink ground-station link"
+requires-python = ">=3.10"
+dependencies = ["numpy", "matplotlib", "pymavlink", "torch"]
+
+[project.optional-dependencies]
+test = ["pytest"]
+
+[project.scripts]
+nn-drone = "nn_drone.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["nn_drone*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
