@@ -13,7 +13,7 @@ Supported modes: GUIDED, AUTO, LOITER, RTL, LAND.
 Supported mission commands: TAKEOFF, WAYPOINT, LOITER_UNLIM, LOITER_TURNS (circle), LOITER_TIME,
 RETURN_TO_LAUNCH, LAND, DO_CHANGE_SPEED, DO_JUMP.
 """
-import argparse, math, os, time
+import argparse, math, os, socket, time
 import numpy as np
 
 os.environ.setdefault("MAVLINK20", "1")
@@ -403,8 +403,13 @@ class Vehicle:
 class Server:
     def __init__(self, veh, gcs, out=print):
         self.v = veh
-        self.m = mavutil.mavlink_connection(f"udpout:{gcs}", source_system=int(veh.P["SYSID_THISMAV"]),
+        # pymavlink's "udpout" binds the destination port locally on Windows, which collides with a
+        # ground station on the same PC. Instead bind an ephemeral local port and send to the GCS.
+        host, port = gcs.rsplit(":", 1)
+        self.m = mavutil.mavlink_connection("udpin:0.0.0.0:0", source_system=int(veh.P["SYSID_THISMAV"]),
                                             source_component=1, dialect="ardupilotmega")
+        dest = (socket.gethostbyname(host), int(port))
+        self.m.clients.add(dest); self.m.clients_last_alive[dest] = time.time()
         self.mav = self.m.mav
         self.param_queue = []; self.last = {}
         self.up = None            # mission upload in progress: dict(count, items, next, t)
@@ -620,7 +625,12 @@ class Server:
 
     def poll(self):
         while True:
-            msg = self.m.recv_match(blocking=False)
+            try:
+                msg = self.m.recv_match(blocking=False)
+            except ConnectionResetError:
+                # Windows reports "port unreachable" from an earlier send (ground station not open yet,
+                # or closed) as WinError 10054 on the next receive. Harmless for UDP: keep going.
+                continue
             if msg is None:
                 break
             self.handle(msg)
