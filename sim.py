@@ -15,7 +15,8 @@ Network interface
   outputs (n_motors):       value in [-1, 1]  ->  PWM = 1500 + 500 * value  (1000..2000 us)
 """
 import os
-import numpy as np
+import backend
+from backend import xp as np      # NumPy, or CuPy when NN_DEVICE=cuda (see backend.py)
 
 G = 9.81
 I_MAX = 1.5      # m*s, scale of the integrator input
@@ -96,7 +97,7 @@ class MultirotorEnv:
         self.randomize = randomize
         self.noise = noise
         self.episode_len = episode_len
-        self.rng = np.random.default_rng(seed)
+        self.rng = backend.default_rng(seed)
 
         f = FRAMES[frame]
         ang = np.deg2rad(np.array(f["angles"], dtype=np.float64))
@@ -291,7 +292,8 @@ class MultirotorEnv:
             self.impact[new] = np.maximum(self.impact[new], -self.v[new, 2])
             if g.any():                                   # resting on the ground: level, not moving
                 _, _, yaw = euler_from_quat(self.q[g])
-                self.q[g] = quat_from_euler(np.zeros(g.sum()), np.zeros(g.sum()), yaw)
+                ng = int(g.sum())
+                self.q[g] = quat_from_euler(np.zeros(ng), np.zeros(ng), yaw)
                 self.p[g, 2] = 0; self.v[g] = 0; self.w[g] = 0; self.acc_b[g] = np.array([0, 0, G])
             self.on_ground = g
 

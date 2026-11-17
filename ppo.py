@@ -1,5 +1,7 @@
-"""Minimal PPO in pure NumPy (manual backprop) - no deep-learning framework needed."""
-import numpy as np
+"""Minimal PPO in NumPy (manual backprop) - no deep-learning framework needed.
+Runs on the GPU through CuPy when NN_DEVICE=cuda (see backend.py)."""
+import backend
+from backend import xp as np
 
 
 class MLP:
@@ -54,8 +56,8 @@ class Adam:
         self.t = 0
 
     def step(self, grads, max_norm=0.5):
-        gn = np.sqrt(sum(float((g ** 2).sum()) for g in grads))
-        sc = min(1.0, max_norm / (gn + 1e-8))
+        gn = np.sqrt(sum((g ** 2).sum() for g in grads))
+        sc = np.minimum(1.0, max_norm / (gn + 1e-8)).astype(np.float32)
         self.t += 1
         b1, b2 = 0.9, 0.999
         for p, g, m, v in zip(self.p, grads, self.m, self.v):
@@ -69,7 +71,7 @@ class Adam:
 class PPO:
     def __init__(self, obs_dim, act_dim, hidden=(64, 64), seed=0, lr=3e-4,
                  gamma=0.99, lam=0.95, clip=0.2, ent_coef=0.0, init_logstd=-0.7):
-        rng = np.random.default_rng(seed)
+        rng = backend.default_rng(seed)
         self.rng = rng
         self.pi = MLP([obs_dim, *hidden, act_dim], out_tanh=True, rng=rng, out_scale=0.1)
         self.vf = MLP([obs_dim, 128, 128, 1], out_tanh=False, rng=rng)

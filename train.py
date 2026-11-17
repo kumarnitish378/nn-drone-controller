@@ -1,9 +1,8 @@
 import argparse, time, json, os
-import numpy as np
-from sim import MultirotorEnv
-from ppo import PPO
 
 ap = argparse.ArgumentParser()
+ap.add_argument("--device", default="auto", choices=["auto", "cuda", "cpu"],
+                help="cuda = NVIDIA GPU through CuPy, auto = GPU if available else CPU")
 ap.add_argument("--frame", default="quad_x")
 ap.add_argument("--envs", type=int, default=1024)
 ap.add_argument("--steps", type=int, default=128)
@@ -19,6 +18,13 @@ ap.add_argument("--min_logstd", type=float, default=-3.0)
 ap.add_argument("--lam_t", type=float, default=0.0)
 ap.add_argument("--lam_s", type=float, default=0.0)
 args = ap.parse_args()
+
+os.environ["NN_DEVICE"] = args.device          # must be set before sim/ppo are imported (see backend.py)
+import backend
+from backend import xp as np
+from sim import MultirotorEnv
+from ppo import PPO
+print("device:", backend.device_name(), flush=True)
 
 env = MultirotorEnv(args.envs, frame=args.frame, seed=args.seed, **json.loads(args.cfg))
 agent = PPO(env.obs_dim, env.act_dim, seed=args.seed, lr=args.lr)
@@ -39,7 +45,7 @@ for it in range(args.max_iters):
     O = np.zeros((T, N, env.obs_dim), np.float32); A = np.zeros((T, N, env.act_dim), np.float32)
     LP = np.zeros((T, N), np.float32); R = np.zeros((T, N), np.float32)
     V = np.zeros((T + 1, N), np.float32); D = np.zeros((T, N), bool)
-    crashes = 0; dist_sum = 0.0
+    crashes = np.zeros((), np.int64); dist_sum = np.zeros(())   # stay on the device: no sync per step
     for t in range(T):
         a, lp = agent.act(obs)
         V[t] = agent.value(obs)
@@ -48,7 +54,7 @@ for it in range(args.max_iters):
         if final_obs is not None:      # time-limit: bootstrap from the pre-reset state
             r = r + agent.gamma * agent.value(final_obs) * timeout
         R[t] = r; D[t] = crashed | timeout
-        crashes += int(crashed.sum()); dist_sum += float(info["dist"].mean())
+        crashes += crashed.sum(); dist_sum += info["dist"].mean()
     V[T] = agent.value(obs)
     adv = np.zeros((T, N), np.float32); last = 0
     for t in reversed(range(T)):
@@ -63,7 +69,7 @@ for it in range(args.max_iters):
                  cont=(~D).reshape(-1).astype(np.float32), lam_t=args.lam_t, lam_s=args.lam_s)
     el = time.time() - t0
     rec = dict(samples=samples0 + (it + 1) * T * N, reward=float(R.mean() * 10),
-               crash_per_1k=crashes / (T * N) * 1000, dist=dist_sum / T,
+               crash_per_1k=float(crashes) / (T * N) * 1000, dist=float(dist_sum) / T,
                std=float(np.exp(agent.logstd).mean()))
     log.append(rec)
     if it % 10 == 0:
