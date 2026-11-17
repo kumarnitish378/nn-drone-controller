@@ -1,8 +1,11 @@
 __pycache__/
 *.pyc
+.pytest_cache/
 flight_log.npz
 results.json
 ci_report_*.json
 ci_*_results.json
 ci_*_results.png
 dist/
+policy*.npz
+policy*_log.json

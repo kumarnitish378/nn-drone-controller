@@ -6,30 +6,47 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
+  unit:
+    name: simulator, networks and PPO match the reference
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install numpy matplotlib pymavlink pytest
+      - name: Unit, golden and browser-core tests
+        run: python -m pytest -q
+      - name: Web page is up to date with its sources
+        run: python -m nn_drone build-web && git diff --exit-code web/index.html
+
+  models:
     name: ${{ matrix.frame }}
     runs-on: ubuntu-latest
     timeout-minutes: 45
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - frame: quad_x
-            weights: quad_x_policy_v4.npz
-          - frame: hex_x
-            weights: hex_x_policy_v1.npz
+        frame: [quad_x, hex_x]
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-
       - name: Install dependencies
-        run: pip install numpy matplotlib
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install numpy matplotlib pymavlink
 
       - name: Run test cases
-        run: python3 ci_test.py ${{ matrix.weights }} ${{ matrix.frame }}
+        run: python -m nn_drone ci-gate --frame ${{ matrix.frame }}
 
       - name: Upload test report and charts
         if: always()
@@ -44,7 +61,9 @@ jobs:
 
       # Reached only if every test case passed
       - name: Package the model
-        run: python3 export_model.py ${{ matrix.weights }} ${{ matrix.frame }} dist
+        run: >
+          python -m nn_drone export-model --weights models/${{ matrix.frame == 'quad_x' && 'quad_x_policy_v4' || 'hex_x_policy_v1' }}.npz
+          --output-dir dist --test-report ci_report_${{ matrix.frame }}.json
 
       - name: Upload the model
         uses: actions/upload-artifact@v4
@@ -53,8 +72,8 @@ jobs:
           path: dist/
           if-no-files-found: error
 
-  links:
-    name: ground station link and web tool
+  ground-link:
+    name: ground station link
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -62,16 +81,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-      - uses: actions/setup-node@v4
-        with:
-          node-version: "22"
       - name: Install dependencies
-        run: pip install -r requirements.txt
+        run: |
+          pip install torch --index-url https://download.pytorch.org/whl/cpu
+          pip install numpy matplotlib pymavlink
       - name: Scripted ground station flies a mission over MAVLink (4 kg quad)
-        run: python3 test_mavlink.py quad_x 4
+        run: python -m nn_drone ground-link-test --frame quad_x --mass 4
       - name: Scripted ground station flies a mission over MAVLink (95 kg hexacopter)
-        run: python3 test_mavlink.py hex_x 95
-      - name: Browser simulator core matches the Python simulator
-        run: python3 web/test_core.py
-      - name: Web page is up to date with its sources
-        run: python3 web/build.py && git diff --exit-code web/index.html
+        run: python -m nn_drone ground-link-test --frame hex_x --mass 95

@@ -1,0 +1,56 @@
+{
+ "case0": {
+  "version": "v1",
+  "frame": "quad_x",
+  "overrides": {}
+ },
+ "case1": {
+  "version": "v2",
+  "frame": "quad_x",
+  "overrides": {}
+ },
+ "case2": {
+  "version": "v3",
+  "frame": "quad_x",
+  "overrides": {}
+ },
+ "case3": {
+  "version": "v3",
+  "frame": "hex_x",
+  "overrides": {}
+ },
+ "case4": {
+  "version": "v4",
+  "frame": "quad_x",
+  "overrides": {}
+ },
+ "case5": {
+  "version": "v4",
+  "frame": "hex_x",
+  "overrides": {}
+ },
+ "case6": {
+  "version": "v4",
+  "frame": "quad_x",
+  "overrides": {
+   "mass_range": [
+    1.0,
+    100.0
+   ],
+   "alt_range": [
+    0.0,
+    2000.0
+   ]
+  }
+ },
+ "case7": {
+  "version": "v4",
+  "frame": "hex_x",
+  "overrides": {
+   "mass": 95.0,
+   "ground": true,
+   "alt0": 1200.0,
+   "err_clip": 2.5
+  }
+ }
+}

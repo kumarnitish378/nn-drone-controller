@@ -1,3 +1,5 @@
 numpy
 matplotlib
 pymavlink
+torch
+pytest
