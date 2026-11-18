@@ -9,6 +9,9 @@ one 15 m radius circle at 30 m, return to launch and land.
 **Same on both sides:** 3 kg quad (ArduPilot's default SITL quad), 3 m/s horizontal and climb, 1.8 m/s descent,
 0.5 m/s landing, 2 m/s wind from 45 degrees.
 
+The numbers below were measured with the networks running at 100 Hz (profile v4). The commands now fly the
+default networks, which run in the 400 Hz loop (profile v5); these numbers have not been re-measured at 400 Hz.
+
 | | ArduCopter PID | Network, quad | Network, hexa |
 |---|---|---|---|
 | Mission time | 205 s | 184 s | 183 s |

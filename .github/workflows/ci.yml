@@ -30,7 +30,7 @@ jobs:
   models:
     name: ${{ matrix.frame }}
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 120
     strategy:
       fail-fast: false
       matrix:
@@ -62,7 +62,7 @@ jobs:
       # Reached only if every test case passed
       - name: Package the model
         run: >
-          python -m nn_drone export-model --weights models/${{ matrix.frame == 'quad_x' && 'quad_x_policy_v4' || 'hex_x_policy_v1' }}.npz
+          python -m nn_drone export-model --weights models/${{ matrix.frame == 'quad_x' && 'quad_x_policy_v4_400hz' || 'hex_x_policy_v1_400hz' }}.npz
           --output-dir dist --test-report ci_report_${{ matrix.frame }}.json
 
       - name: Upload the model

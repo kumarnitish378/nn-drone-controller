@@ -12,7 +12,7 @@ from nn_drone.export.web_page import browser_network
 from nn_drone.ground_link.geodesy import HomePoint
 from nn_drone.ground_link.mission_items import MissionItem
 from nn_drone.ground_link.vehicle import CopterMode, SimulatedVehicle
-from nn_drone.paths import WEB_DIR, default_weights
+from nn_drone.paths import MODELS_DIR, WEB_DIR, default_weights
 from nn_drone.simulation.scaling import length_scale
 
 HOME = HomePoint(28.5355, 77.3910, 0.0)
@@ -34,8 +34,8 @@ console.log(JSON.stringify({steps: k, maxd: maxd, final: v.pos, crashed: v.crash
 """
 
 
-def python_track(frame, mass_kg):
-    vehicle = SimulatedVehicle(frame, default_weights(frame), HOME, mass_kg, log=lambda *_: None)
+def python_track(frame, mass_kg, weights):
+    vehicle = SimulatedVehicle(frame, weights, HOME, mass_kg, log=lambda *_: None)
     for name, value in dict(SIM_NOISE=0.0, SIM_WIND_SPD=2.0, SIM_WIND_DIR=45.0).items():
         vehicle.set_parameter(name, value)
 
@@ -59,11 +59,14 @@ def python_track(frame, mass_kg):
 
 
 @pytest.mark.skipif(shutil.which("node") is None, reason="needs node")
-@pytest.mark.parametrize("frame, mass_kg", [("quad_x", 4.0), ("hex_x", 95.0)])
-def test_browser_core_flies_like_python(frame, mass_kg, tmp_path):
-    track, steps = python_track(frame, mass_kg)
+@pytest.mark.parametrize("frame, mass_kg, weights", [("quad_x", 4.0, default_weights("quad_x")),
+                                                     ("hex_x", 95.0, default_weights("hex_x")),
+                                                     ("quad_x", 4.0, MODELS_DIR / "quad_x_policy_v4.npz")],
+                         ids=["quad_400hz", "hex_400hz", "quad_100hz"])
+def test_browser_core_flies_like_python(frame, mass_kg, weights, tmp_path):
+    track, steps = python_track(frame, mass_kg, weights)
     case = tmp_path / "case.json"
-    case.write_text(json.dumps(dict(frame=frame, mass=mass_kg, w=browser_network(default_weights(frame)), traj=track)))
+    case.write_text(json.dumps(dict(frame=frame, mass=mass_kg, w=browser_network(weights), traj=track)))
     runner = tmp_path / "run.js"
     runner.write_text(JS_RUNNER)
     output = subprocess.run(["node", str(runner), str(WEB_DIR / "core.js"), str(case)], check=True, capture_output=True, text=True)

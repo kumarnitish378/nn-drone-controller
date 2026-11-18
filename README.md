@@ -4,12 +4,16 @@ An experiment: a small neural network that flies a multirotor by driving the mot
 (1000–2000 µs), with no PID loops. Everything here is **simulation only** — a simplified rigid-body
 simulator written for this experiment, not ArduPilot SITL, and nothing has flown on real hardware.
 
-Two trained networks are included:
+Two trained networks are included. By default they run at 400 Hz, the rate of ArduCopter's main loop
+(simulator profile v5, see [Running at 400 Hz](#running-at-400-hz)):
 
-| Frame | Weights | Shape | How it was trained |
+| Frame | Weights (400 Hz) | Shape | How it was trained |
 |---|---|---|---|
-| Quad X | `models/quad_x_policy_v4.npz` | 61 → 64 → 64 → 4 | PPO from scratch (21 inputs), then extended and fine-tuned in stages |
-| Hexa X | `models/hex_x_policy_v1.npz` | 67 → 64 → 64 → 6 | PPO from scratch in one go, 98 million samples |
+| Quad X | `models/quad_x_policy_v4_400hz.npz` | 61 → 64 → 64 → 4 | PPO from scratch (21 inputs), then extended and fine-tuned in stages, at 100 Hz |
+| Hexa X | `models/hex_x_policy_v1_400hz.npz` | 67 → 64 → 64 → 6 | PPO from scratch in one go, 98 million samples, at 100 Hz |
+
+The 400 Hz files hold the same weights as `models/quad_x_policy_v4.npz` and `models/hex_x_policy_v1.npz`,
+which fly in the 100 Hz simulator they were trained in.
 
 ## The network
 
@@ -26,12 +30,39 @@ strength and lag, battery voltage, wind and sensor noise.
 
 Two things around the network are hand-designed, not learned:
 
-- **Size normalisation** – inputs and control period are scaled by `L = (mass / 1 kg)^(1/3)`, so a
-  larger drone looks like the 1 kg one to the network (100 Hz loop at 1 kg, about 46 Hz at 100 kg).
+- **Size normalisation** – inputs are scaled by `L = (mass / 1 kg)^(1/3)`, so a larger drone looks like
+  the 1 kg one to the network. In profiles v1–v4 the control period is scaled too (100 Hz at 1 kg, about
+  46 Hz at 100 kg); in v5 every size runs at 400 Hz and the earlier frames the network sees are one
+  10 ms × √L step apart (4 loop iterations at 1 kg, 9 at 95 kg).
 - **Integral input weights** – initially set by hand to 0.15 × the position-error weights
   (Ki = 0.5 /s), then fine-tuned by PPO.
 
-## Results: quad (v4 weights, simulation)
+## Running at 400 Hz
+
+Profile v5 steps the network and the physics at 400 Hz for every drone size. Everything time-based is
+counted in size-normalised time (reference steps of 10 ms × √L), so it means the same as at 100 Hz:
+the per-step rewards and the motor-change penalty, episode length, the PPO discount and GAE factors, the
+position-error integrator, how often training waypoints jump, and the spacing of the history frames.
+
+Both networks, unchanged, pass every CI gate check at 400 Hz. On training-style episodes (512 randomised
+1 kg quads, 6 s) the quad scores the same at both rates: 0.78 reward per 10 ms, 0.52 crashes per 1000
+reference steps at 100 Hz and 0.31 at 400 Hz, mean distance 1.56 m and 1.51 m.
+
+**Training at 400 Hz has not improved them yet.** Three PPO fine-tuning runs from these weights
+(20 minutes each, about 170 million samples) all made the deterministic network worse on the same
+episodes; for the quad the crash rate rose from 0.27 to 0.6–0.9 per 1000 reference steps, for the hex the
+reward fell from 1.54 to 0.8–1.2. The exploration noise is the likely reason: drawn fresh every 2.5 ms it
+costs far more under the motor-change penalty than at 100 Hz (reward per 10 ms with noise 0.05: 0.34
+at 400 Hz against 0.71 at 100 Hz), which buries the learning signal. Holding the noise for 10 ms made
+training diverge; a critic warm-up and a lower learning rate only slowed the decline.
+
+| Run | Change | Quad crash/1k (start → end) | Hex reward (start → end) |
+|---|---|---|---|
+| 1 | learning rate 1e-4 | 0.27 → 0.86 | 1.54 → 0.83 |
+| 2 | exploration noise held for 10 ms | 0.27 → 1.58 (diverged) | 1.54 → 1.23, crash/1k 0.08 → 1.04 |
+| 3 | 30 critic-only iterations, learning rate 3e-5 | 0.25 → 0.62 | 1.54 → 1.17 |
+
+## Results: quad (v4 weights, simulation at 100 Hz)
 
 | Test | Result |
 |---|---|
@@ -122,8 +153,9 @@ Everything is one Python package, `nn_drone`, driven from one command line: `pyt
 
 ### Simulator profiles
 
-The experiment went through four simulator generations. Each weights file records the one it was trained in
-(`simulator_profile`), and the tools fly it there, so old networks behave exactly as they did:
+The experiment went through four simulator generations at 100 Hz, and v5 moves the network to 400 Hz. Each
+weights file records the profile it flies in (`simulator_profile`), and the tools fly it there, so old networks
+behave exactly as they did:
 
 | Profile | Adds | Network |
 |---|---|---|
@@ -131,6 +163,7 @@ The experiment went through four simulator generations. Each weights file record
 | v2 | integrated position error (24 inputs) | `models/legacy/quad_x_v2.npz` |
 | v3 | two previous frames, moving targets, smoothness rewards (60 inputs) | `models/legacy/quad_x_v3.npz` |
 | v4 | size scaling to 100 kg, thinner air with altitude, solid ground, mass-class input (61 inputs) | `models/quad_x_policy_v4.npz`, `models/hex_x_policy_v1.npz` |
+| v5 | the network in a fixed 400 Hz loop at every size, physics at 400 Hz (same inputs as v4) | `models/quad_x_policy_v4_400hz.npz`, `models/hex_x_policy_v1_400hz.npz` |
 
 Weights files are shared with the C header export and the web tool: `pi_W0..2`, `pi_b0..2` are the flight
 network, stored [inputs][outputs].
@@ -218,11 +251,11 @@ Hexacopter: add `--frame hex_x`; another network: `--weights path.npz`. Training
 python -m nn_drone train --frame hex_x --minutes 9 --output hex --config '{"position_error_clip_m": 5.0, "moving_target_share": 0.0, "reward": {"action_change_squared": 0.3, "action_change_absolute": 0.0, "excess_tilt": 0.0, "excess_speed": 0.03, "free_speed": 4.0}}'
 ```
 
-That is the configuration that trained the hex network (repeat with `--resume hex.npz` until about 100 million
+That is the configuration that trained the hex network (at 100 Hz: add `--profile v4`; repeat with `--resume hex.npz` until about 100 million
 samples, on a 1 kg drone at sea level). `--device` picks `cuda` or `cpu` (default: the GPU when PyTorch sees
 one); on an RTX 4050 laptop GPU 60 iterations of 1024 drones x 128 steps took about 50 s, against about 250 s
-for the original NumPy trainer on the CPU, with the same learning curve. `--profile v1`...`v3` trains in an older
-simulator generation.
+for the original NumPy trainer on the CPU, with the same learning curve. Training defaults to profile v5 (400 Hz, 512 steps per
+rollout, about 4x the time per simulated second); `--profile v1`...`v4` trains in an older simulator generation.
 
 `--error-clip 2.5` is the limit (in size-normalised metres) on the position error fed to the network; lower
 means slower, gentler flight.
