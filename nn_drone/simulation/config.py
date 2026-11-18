@@ -1,9 +1,10 @@
 """Simulator settings.
 
 `SimulatorConfig` holds what a user may change (airframe, randomisation, reward weights).
-`SimulatorProfile` fixes what a trained network depends on: which inputs it sees and how the
-position-error integrator behaves. Profiles v1..v4 reproduce the four generations of the
-experiment, so every shipped network can be flown in the simulator it was trained in.
+`SimulatorProfile` fixes what a trained network depends on: which inputs it sees, how often it runs
+and how the position-error integrator behaves. Profiles v1..v4 reproduce the four generations of the
+experiment at 100 Hz, so every network can be flown in the simulator it was trained in; v5 runs the
+network in the flight controller's 400 Hz main loop.
 """
 from dataclasses import dataclass, field, fields, is_dataclass, replace
 from enum import Enum
@@ -37,7 +38,6 @@ class SimulatorConfig:
     motor_time_constant_s: float = 0.05
     drag_n_per_mps: float = 0.25
     nominal_battery_voltage: float = 16.0
-    control_period_s: float = 0.01
     physics_substeps: int = 2
     position_error_clip_m: float = 5.0
     moving_target_share: float = 0.4
@@ -62,6 +62,28 @@ class IntegratorSettings:
     target_jump_speed: float = 5.0
 
 
+REFERENCE_CONTROL_PERIOD_S = 0.01
+"""Control period of the 1 kg airframe in v1..v4. Size-normalised time is counted in these reference steps:
+episode length, discounting, history spacing and the per-step rewards are defined per reference step."""
+
+
+@dataclass(frozen=True)
+class ControlTiming:
+    """How often the network runs. `scales_with_size`: the period grows with sqrt(L) (Froude similarity),
+    otherwise every drone runs at the same rate, as in a flight controller's fixed main loop."""
+    period_s: float
+    scales_with_size: bool
+    physics_substeps: int
+
+    @property
+    def rate_hz(self):
+        return 1.0 / self.period_s
+
+
+FROUDE_SCALED_100_HZ = ControlTiming(period_s=REFERENCE_CONTROL_PERIOD_S, scales_with_size=True, physics_substeps=2)
+MAIN_LOOP_400_HZ = ControlTiming(period_s=1 / 400, scales_with_size=False, physics_substeps=1)
+
+
 @dataclass(frozen=True)
 class SimulatorProfile:
     name: str
@@ -72,6 +94,7 @@ class SimulatorProfile:
     air_density_effect: bool
     integrator: IntegratorSettings
     default_reward: RewardWeights
+    control_timing: ControlTiming = FROUDE_SCALED_100_HZ
 
     def input_size(self, motor_count):
         size = SENSOR_FEATURES + motor_count
@@ -107,8 +130,12 @@ PROFILE_V4 = replace(
     PROFILE_V3, name="v4", has_mass_class_input=True, air_density_effect=True,
     integrator=IntegratorSettings(IntegratorSettleRule.VEHICLE_AND_TARGET_STILL, capture_radius=1.0, clamp=4.0))
 
-PROFILES = {profile.name: profile for profile in (PROFILE_V1, PROFILE_V2, PROFILE_V3, PROFILE_V4)}
-CURRENT_PROFILE = PROFILE_V4
+PROFILE_V5 = replace(PROFILE_V4, name="v5", control_timing=MAIN_LOOP_400_HZ)
+
+PROFILES = {profile.name: profile for profile in (PROFILE_V1, PROFILE_V2, PROFILE_V3, PROFILE_V4, PROFILE_V5)}
+CURRENT_PROFILE = PROFILE_V5
+UNLABELLED_FILE_PROFILE = PROFILE_V4
+"""Weights files written before profiles were recorded were all trained in v1..v4; their input count picks v4."""
 
 
 def profile_named(name):
@@ -118,7 +145,8 @@ def profile_named(name):
 
 
 def default_config_for(profile, **overrides):
-    return apply_overrides(SimulatorConfig(reward=profile.default_reward), overrides)
+    defaults = SimulatorConfig(reward=profile.default_reward, physics_substeps=profile.control_timing.physics_substeps)
+    return apply_overrides(defaults, overrides)
 
 
 def apply_overrides(settings, overrides):

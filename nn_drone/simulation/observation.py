@@ -102,28 +102,43 @@ class ObservationBuilder:
 
 
 class ObservationHistory:
-    """The network also sees the previous frames; after a reset they are filled with the current one."""
+    """The network also sees earlier frames, `spacing` control steps apart (one reference step of size-normalised
+    time); after a reset they are filled with the current one. Past frames are kept in a ring buffer."""
 
-    def __init__(self, count, motor_count, frames):
-        self.frames = [np.zeros((count, history_frame_size(motor_count)), np.float32) for _ in range(frames)]
+    def __init__(self, count, motor_count, frames, max_spacing_steps=1):
+        self.frame_count = frames
+        self.capacity = max(1, frames * max_spacing_steps)
+        self.max_spacing_steps = max_spacing_steps
+        self.past_frames = np.zeros((self.capacity, count, history_frame_size(motor_count)), np.float32)
+        self.newest_slot = 0
+        self.spacing = np.ones(count, np.int64)
         self.needs_fill = np.ones(count, bool)
         self.latest = None
+        self.drones = np.arange(count)
+
+    def set_spacing(self, indices, spacing_steps):
+        if np.any(spacing_steps > self.max_spacing_steps):
+            raise ValueError(f"history spacing {int(np.max(spacing_steps))} exceeds the {self.max_spacing_steps} steps provided")
+        self.spacing[indices] = spacing_steps
+
+    @property
+    def frames(self):
+        """Most recent first."""
+        return [self.past_frames[(self.newest_slot - (age * self.spacing - 1)) % self.capacity, self.drones]
+                for age in range(1, self.frame_count + 1)]
 
     def remember(self, sensor_frame):
-        if self.frames and self.needs_fill.any():
-            current = sensor_frame.history_features[self.needs_fill]
-            for frame in self.frames:
-                frame[self.needs_fill] = current
+        if self.frame_count and self.needs_fill.any():
+            self.past_frames[:, self.needs_fill] = sensor_frame.history_features[self.needs_fill]
             self.needs_fill[:] = False
         self.latest = sensor_frame
 
     def advance(self):
-        """The frame the network just used becomes the most recent history frame."""
-        if self.latest is None or not self.frames:
+        """The frame the network just used becomes the most recent past frame."""
+        if self.latest is None or not self.frame_count:
             return
-        for newer, older in zip(reversed(self.frames[:-1]), reversed(self.frames[1:])):
-            older[...] = newer
-        self.frames[0][...] = self.latest.history_features
+        self.newest_slot = (self.newest_slot + 1) % self.capacity
+        self.past_frames[self.newest_slot] = self.latest.history_features
 
     def mark_reset(self, indices):
         self.needs_fill[indices] = True

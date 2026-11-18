@@ -5,6 +5,7 @@ import numpy as np
 
 from nn_drone.geometry import quaternion_from_euler
 from nn_drone.simulation import scaling
+from nn_drone.simulation.config import REFERENCE_CONTROL_PERIOD_S
 from nn_drone.simulation.state import LEVEL_ATTITUDE, RESTING_SPECIFIC_FORCE
 from nn_drone.units import GRAVITY_MPS2
 
@@ -34,8 +35,10 @@ class AirframeSampler:
     The order of random draws is part of the contract: it keeps training runs reproducible.
     """
 
-    def __init__(self, config, layout, rng, randomize, variation=AirframeVariation(), disturbance=StartDisturbance()):
+    def __init__(self, config, timing, layout, rng, randomize, variation=AirframeVariation(),
+                 disturbance=StartDisturbance()):
         self.config = config
+        self.timing = timing
         self.layout = layout
         self.rng = rng
         self.randomize = randomize
@@ -68,7 +71,7 @@ class AirframeSampler:
                                               * self._factor(variation.thrust_factor, count))
         airframe.motor_time_constant[indices] = (config.motor_time_constant_s * np.sqrt(length)
                                                  * self._factor(variation.motor_lag_factor, count))
-        airframe.control_period[indices] = config.control_period_s * np.sqrt(length)
+        self._set_control_period(airframe, indices, length)
         airframe.yaw_torque_coefficient[indices] = (config.yaw_torque_per_thrust_m * length
                                                     * self._factor(variation.yaw_torque_factor, count))
         airframe.drag_coefficient[indices] = config.drag_n_per_mps * scaling.drag_area_scale(nominal_mass)
@@ -86,6 +89,15 @@ class AirframeSampler:
         else:
             airframe.rest_voltage[indices] = config.nominal_battery_voltage
             airframe.wind[indices] = 0
+
+    def _set_control_period(self, airframe, indices, length):
+        timing = self.timing
+        if timing.scales_with_size:
+            airframe.control_period[indices] = timing.period_s * np.sqrt(length)
+            airframe.normalised_step_length[indices] = 1.0
+        else:
+            airframe.control_period[indices] = timing.period_s
+            airframe.normalised_step_length[indices] = timing.period_s / (REFERENCE_CONTROL_PERIOD_S * np.sqrt(length))
 
     def sample_start_state(self, state, airframe, indices, disturbed):
         disturbance, count = self.disturbance, len(indices)

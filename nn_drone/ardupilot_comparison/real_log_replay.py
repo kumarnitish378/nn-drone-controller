@@ -82,7 +82,8 @@ class ShadowPilot:
                 env.integrator.set_reference_target(np.arange(1), self.last_target[None])
                 self.has_reference = True
             env.integrator.update((self.last_target - position)[None], velocity[None], self.last_target[None],
-                                  env.airframe.length_scale, env.airframe.control_period)
+                                  env.airframe.length_scale, env.airframe.control_period,
+                                  env.airframe.normalised_step_length)
         self.last_target = target.copy()
         if applied_action is not None:
             env.previous_action[0] = applied_action

@@ -14,6 +14,7 @@ class TargetSampling:
     turn_rate: float = 0.5
     turning_share: float = 0.7
     waypoint_switch_probability: float = 1 / 400.0
+    """Per reference step of size-normalised time."""
 
 
 class TargetTrack:
@@ -52,6 +53,9 @@ class TargetTrack:
         self.position += self.velocity * control_period[:, None]
         self.heading = wrap_angle(self.heading + self.turn_rate * control_period)
 
-    def pick_switching(self, eligible):
+    def pick_switching(self, eligible, normalised_step_length):
         """Indices whose waypoint jumps this step, so the network learns transitions."""
-        return np.nonzero((self.rng.random(len(eligible)) < self.sampling.waypoint_switch_probability) & eligible)[0]
+        per_reference_step = self.sampling.waypoint_switch_probability
+        per_step = np.where(normalised_step_length == 1.0, per_reference_step,
+                            1.0 - (1.0 - per_reference_step) ** normalised_step_length)
+        return np.nonzero((self.rng.random(len(eligible)) < per_step) & eligible)[0]

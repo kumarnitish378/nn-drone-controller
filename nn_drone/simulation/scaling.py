@@ -2,7 +2,8 @@
 
 length ~ m^(1/3), inertia ~ m^(5/3), drag area ~ m^(2/3), motor lag ~ sqrt(length).
 A drone scaled this way behaves like the 1 kg one with lengths x L and time x sqrt(L) (Froude
-similarity), so the network sees size-normalised inputs and runs with a period of 10 ms x sqrt(L).
+similarity), so the network sees size-normalised inputs. Profiles v1..v4 also run the network with a
+period of 10 ms x sqrt(L); v5 runs it at a fixed 400 Hz and counts time in those 10 ms x sqrt(L) reference steps.
 """
 import numpy as np
 

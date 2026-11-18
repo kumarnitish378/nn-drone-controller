@@ -3,7 +3,7 @@
 The format is shared with the C header export, the web tool and the CI model package:
 `pi_W{n}` / `pi_b{n}` are the flight network's layers with weights stored [inputs][outputs],
 `vf_W{n}` / `vf_b{n}` the value network, `logstd` the exploration noise, and `simulator_profile`
-the simulator generation the network flies in (files without it fly in the current one). A file with
+the simulator generation the network flies in (files without it predate profile labels and fly in v4). A file with
 fewer inputs than its profile provides is padded with zero weights: the extra inputs are ignored.
 """
 from dataclasses import dataclass
@@ -12,7 +12,7 @@ from pathlib import Path
 import numpy as np
 import torch
 
-from nn_drone.simulation.config import CURRENT_PROFILE, profile_named
+from nn_drone.simulation.config import UNLABELLED_FILE_PROFILE, profile_named
 from nn_drone.simulation.frames import LAYOUT_BY_MOTOR_COUNT
 
 POLICY_PREFIX = "pi"
@@ -55,7 +55,7 @@ def inspect_checkpoint(path):
     with np.load(path) as arrays:
         layers = read_layers(arrays, POLICY_PREFIX)
         input_size, motor_count = layers[0][0].shape[0], layers[-1][0].shape[1]
-        profile_name = str(arrays[PROFILE_KEY]) if PROFILE_KEY in arrays else CURRENT_PROFILE.name
+        profile_name = str(arrays[PROFILE_KEY]) if PROFILE_KEY in arrays else UNLABELLED_FILE_PROFILE.name
     expected_inputs = profile_named(profile_name).input_size(motor_count)
     if input_size > expected_inputs:
         raise ValueError(f"{path}: {input_size} inputs, but simulator profile {profile_name} provides {expected_inputs}")

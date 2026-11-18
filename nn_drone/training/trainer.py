@@ -7,7 +7,7 @@ from pathlib import Path
 import torch
 
 from nn_drone.policy.checkpoint import inspect_checkpoint, load_policy_weights, save_checkpoint
-from nn_drone.simulation import MultirotorEnv, default_config_for, profile_named
+from nn_drone.simulation import CURRENT_PROFILE, MultirotorEnv, default_config_for, profile_named
 from nn_drone.training.ppo import PPOAgent, PPOSettings
 from nn_drone.training.rollout import RolloutCollector
 
@@ -18,14 +18,16 @@ SECONDS_PER_MINUTE = 60
 REWARD_REPORT_SCALE = 10
 CRASH_RATE_PER = 1000
 SAMPLES_PER_MILLION = 1e6
+REFERENCE_STEPS_PER_ROLLOUT = 128
 
 
 @dataclass(frozen=True)
 class TrainingPlan:
     frame: str = "quad_x"
-    profile_name: str = "v4"
+    profile_name: str = CURRENT_PROFILE.name
     parallel_drones: int = 1024
-    steps_per_rollout: int = 128
+    steps_per_rollout: int = None
+    """Defaults to 128 reference steps of size-normalised time (512 steps at 400 Hz for a 1 kg drone)."""
     time_budget_minutes: float = 8.0
     max_iterations: int = 100000
     output_stem: str = "policy"
@@ -72,10 +74,12 @@ class Trainer:
 
     def run(self):
         plan = self.plan
-        collector = RolloutCollector(self.env, self.agent, plan.steps_per_rollout)
+        steps_per_rollout = plan.steps_per_rollout or self._default_rollout_steps()
+        collector = RolloutCollector(self.env, self.agent, steps_per_rollout)
         samples_before = self.history[-1]["samples"] if self.history else 0
-        samples_per_iteration = plan.steps_per_rollout * plan.parallel_drones
-        self.log(f"device: {self.device}" + (f" ({torch.cuda.get_device_name(0)})" if self.device == "cuda" else ""))
+        samples_per_iteration = steps_per_rollout * plan.parallel_drones
+        self.log(f"device: {self.device}" + (f" ({torch.cuda.get_device_name(0)})" if self.device == "cuda" else "")
+                 + f", profile {self.profile.name} at {self.profile.control_timing.rate_hz:g} Hz, {steps_per_rollout} steps per rollout")
         started = time.time()
         for iteration in range(plan.max_iterations):
             in_warmup = iteration < plan.critic_warmup_iterations
@@ -102,6 +106,10 @@ class Trainer:
         self._save(self.output.with_suffix(".npz"))
         self.history_path.write_text(json.dumps(self.history))
         self.log("done")
+
+    def _default_rollout_steps(self):
+        typical_step_length = float(self.env.airframe.normalised_step_length.mean())
+        return int(round(REFERENCE_STEPS_PER_ROLLOUT / typical_step_length))
 
     def _save(self, path):
         save_checkpoint(path, self.agent.policy, self.agent.value_network, self.profile.name)

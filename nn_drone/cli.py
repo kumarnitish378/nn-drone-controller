@@ -5,6 +5,7 @@ import sys
 from pathlib import Path
 
 from nn_drone.paths import default_weights
+from nn_drone.simulation.config import CURRENT_PROFILE
 
 
 def _weights_argument(parser, required=False):
@@ -147,9 +148,9 @@ def build_parser():
 
     command = commands.add_parser("train", help="train a network with PPO")
     command.add_argument("--frame", default="quad_x", choices=["quad_x", "hex_x"])
-    command.add_argument("--profile", default="v4", help="simulator generation (v1..v4)")
+    command.add_argument("--profile", default=CURRENT_PROFILE.name, help="simulator generation (v1..v5)")
     command.add_argument("--drones", type=int, default=1024, help="drones simulated in parallel")
-    command.add_argument("--rollout-steps", type=int, default=128)
+    command.add_argument("--rollout-steps", type=int, help="default: 128 reference steps (512 at 400 Hz)")
     command.add_argument("--minutes", type=float, default=8.0)
     command.add_argument("--max-iterations", type=int, default=100000)
     command.add_argument("--output", default="policy", help="output stem: <stem>.npz, <stem>_log.json, <stem>_snapNNN.npz")

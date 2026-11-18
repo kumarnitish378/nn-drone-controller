@@ -40,6 +40,8 @@ class Airframe:
     max_motor_thrust: np.ndarray
     motor_time_constant: np.ndarray
     control_period: np.ndarray
+    normalised_step_length: np.ndarray
+    """One control step in reference steps of size-normalised time (exactly 1 when the period scales with size)."""
     yaw_torque_coefficient: np.ndarray
     drag_coefficient: np.ndarray
     rotational_damping: np.ndarray
@@ -51,7 +53,8 @@ class Airframe:
     def empty(cls, count, control_period):
         return cls(nominal_mass=np.ones(count), length_scale=np.ones(count), mass=np.zeros(count),
                    inertia=np.zeros((count, 3)), max_motor_thrust=np.zeros(count), motor_time_constant=np.zeros(count),
-                   control_period=np.full(count, control_period), yaw_torque_coefficient=np.zeros(count),
+                   control_period=np.full(count, control_period), normalised_step_length=np.ones(count),
+                   yaw_torque_coefficient=np.zeros(count),
                    drag_coefficient=np.zeros(count), rotational_damping=np.zeros(count), start_altitude=np.zeros(count),
                    rest_voltage=np.zeros(count), wind=np.zeros((count, 3)))
 

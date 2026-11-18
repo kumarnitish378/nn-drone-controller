@@ -26,10 +26,17 @@ def flight_network_arrays(weights_path):
     return info, arrays
 
 
-def c_header(frame, arrays, layer_sizes, parameter_count):
+def control_rate_description(timing):
+    if timing.scales_with_size:
+        return f"{timing.rate_hz:g} Hz at 1 kg, period x sqrt(L) for larger drones"
+    return f"{timing.rate_hz:g} Hz at every size"
+
+
+def c_header(frame, arrays, layer_sizes, parameter_count, timing):
     guard = f"{frame.upper()}_MODEL_H"
     lines = [f"/* {frame} flight network: {' -> '.join(map(str, layer_sizes))}, tanh, {parameter_count} float32 parameters.",
-             "   y = tanh(tanh(tanh(x*W0 + b0)*W1 + b1)*W2 + b2);  PWM = 1500 + 500*y. Weights are row-major [in][out]. */",
+             "   y = tanh(tanh(tanh(x*W0 + b0)*W1 + b1)*W2 + b2);  PWM = 1500 + 500*y. Weights are row-major [in][out].",
+             f"   Run it at {control_rate_description(timing)}. */",
              f"#ifndef {guard}", f"#define {guard}"]
     for key, values in arrays.items():
         dimensions = "".join(f"[{size}]" for size in values.shape)
@@ -51,10 +58,11 @@ def export_model(weights_path, output_dir, test_report_path=None):
     parameter_count = int(sum(values.size for values in arrays.values()))
     weights = [values for key, values in arrays.items() if "_W" in key]
     layer_sizes = [int(weights[0].shape[0])] + [int(weight.shape[1]) for weight in weights]
-    (output_dir / f"{frame}_model.h").write_text(c_header(frame, arrays, layer_sizes, parameter_count))
+    timing = info.profile.control_timing
+    (output_dir / f"{frame}_model.h").write_text(c_header(frame, arrays, layer_sizes, parameter_count, timing))
     card = dict(frame=frame, source_weights=Path(weights_path).name, simulator_profile=info.profile_name, layers=layer_sizes,
                 activation="tanh", parameters=parameter_count, size_bytes_float32=parameter_count * np.dtype(np.float32).itemsize,
-                output="per motor, -1..1; PWM = 1500 + 500 * output",
+                output="per motor, -1..1; PWM = 1500 + 500 * output", control_rate=control_rate_description(timing),
                 note="simulation-trained only; inputs must be built and scaled as in nn_drone.simulation.observation")
     if test_report_path and Path(test_report_path).exists():
         card["tests"] = json.loads(Path(test_report_path).read_text())

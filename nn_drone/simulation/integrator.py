@@ -1,13 +1,12 @@
 """Integral of the position error ("I term" input), with the anti-windup rule of each profile."""
 import numpy as np
 
-from nn_drone.simulation.config import IntegratorSettleRule
+from nn_drone.simulation.config import REFERENCE_CONTROL_PERIOD_S, IntegratorSettleRule
 
 
 class PositionErrorIntegrator:
-    def __init__(self, count, settings, nominal_control_period):
+    def __init__(self, count, settings):
         self.settings = settings
-        self.nominal_control_period = nominal_control_period
         self.value = np.zeros((count, 3))
         self.previous_target = np.zeros((count, 3))
 
@@ -17,7 +16,8 @@ class PositionErrorIntegrator:
     def set_reference_target(self, indices, target_position):
         self.previous_target[indices] = target_position[indices]
 
-    def update(self, position_error, velocity, target_position, length_scale, control_period):
+    def update(self, position_error, velocity, target_position, length_scale, control_period, normalised_step_length):
+        """Integrates the size-normalised error over size-normalised time."""
         settings = self.settings
         length = length_scale[:, None]
         time_scale = np.sqrt(length_scale)
@@ -33,7 +33,8 @@ class PositionErrorIntegrator:
                 settled = ((distance < settings.capture_radius)
                            & (np.linalg.norm(velocity, axis=1) / time_scale < settings.settled_speed)
                            & (np.linalg.norm(target_velocity, axis=1) / time_scale < settings.still_target_speed))
-        self.value += (position_error / length) * settled[:, None] * self.nominal_control_period
+        self.value += ((position_error / length) * settled[:, None] * REFERENCE_CONTROL_PERIOD_S
+                       * normalised_step_length[:, None])
         np.clip(self.value, -settings.clamp, settings.clamp, out=self.value)
 
     def _target_velocity(self, target_position, control_period, time_scale):

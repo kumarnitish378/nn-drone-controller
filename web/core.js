@@ -1,8 +1,10 @@
-/* Neural-network drone simulator core (browser + node). A line-for-line port of sim.py (single drone)
-   and of the flight logic in mavlink_sim.py. Axes: x north, y west, z up; body x forward, y left, z up. */
+/* Neural-network drone simulator core (browser + node). A line-for-line port of nn_drone.simulation (single
+   drone) and of the flight logic in nn_drone.ground_link.vehicle. Axes: x north, y west, z up; body x forward,
+   y left, z up. Network timing comes with the weights: {period, scalesWithSize, substeps}. */
 (function (root) {
   "use strict";
-  const G = 9.81, I_MAX = 1.5, I_CLAMP = 4.0, I_ZONE = 1.0, I_SPEED = 0.5;
+  const G = 9.81, I_MAX = 1.5, I_CLAMP = 4.0, I_ZONE = 1.0, I_SPEED = 0.5, REFERENCE_PERIOD = 0.01, HISTORY_FRAMES = 2;
+  const FROUDE_SCALED_100_HZ = { period: REFERENCE_PERIOD, scalesWithSize: true, substeps: 2 };
   const PWM_OFF = 1000, PWM_SPOOL = 1450, T_SPOOL = 2.0, T_CONFIRM = 1.0, T_RAMP = 1.0, T_IDLE_END = 2.0;
   const FRAMES = {
     quad_x: { angles: [45, -135, -45, 135], spin: [1, 1, -1, -1] },
@@ -53,7 +55,8 @@
   // ---------- physics (sim.py) ----------
   class Sim {
     constructor(c) {
-      this.c = Object.assign({ frame: "quad_x", mass: 1, tw: 2.8, v0: 16, noise: true, errClip: 2.5, alt0: 0, wind: [0, 0, 0] }, c);
+      this.c = Object.assign({ frame: "quad_x", mass: 1, tw: 2.8, v0: 16, noise: true, errClip: 2.5, alt0: 0, wind: [0, 0, 0],
+                               timing: FROUDE_SCALED_100_HZ }, c);
       const f = FRAMES[this.c.frame]; this.M = f.angles.length;
       this.mx = f.angles.map((a) => 0.17 * Math.cos(a * Math.PI / 180));
       this.my = f.angles.map((a) => -0.17 * Math.sin(a * Math.PI / 180));
@@ -61,13 +64,17 @@
       const mn = this.c.mass; this.mn = mn; this.Ls = Math.cbrt(mn); this.rL = Math.sqrt(this.Ls);
       this.mass = mn; const s53 = Math.pow(mn, 5 / 3);
       this.inertia = [0.010 * s53, 0.010 * s53, 0.018 * s53];
-      this.tmax = this.c.tw * mn * G / this.M; this.tau = 0.05 * this.rL; this.dt = 0.01 * this.rL;
+      const timing = this.c.timing; this.substeps = timing.substeps;
+      this.dt = timing.scalesWithSize ? timing.period * this.rL : timing.period;
+      this.stepLength = timing.scalesWithSize ? 1 : timing.period / (REFERENCE_PERIOD * this.rL);
+      this.histSpacing = Math.max(1, Math.round(1 / this.stepLength));
+      this.tmax = this.c.tw * mn * G / this.M; this.tau = 0.05 * this.rL;
       this.kyaw = 0.016 * this.Ls; this.drag = 0.25 * Math.pow(mn, 2 / 3); this.rdamp = 0.002 * s53;
       this.histDim = 14 + this.M; this.obsDim = 21 + this.M + 2 * this.histDim;
       this.p = [0, 0, 0]; this.v = [0, 0, 0]; this.q = [1, 0, 0, 0]; this.w = [0, 0, 0];
       this.mot = new Array(this.M).fill(0); this.prevA = new Array(this.M).fill(-1);
       this.ierr = [0, 0, 0]; this.volt = this.c.v0; this.accB = [0, 0, G];
-      this.onGround = true; this.impact = 0; this.h1 = null; this.h2 = null; this.lastBase = null;
+      this.onGround = true; this.impact = 0; this.past = []; this.lastBase = null;
       this.prevTarget = [0, 0, 0]; this.target = [0, 0, 0]; this.targetYaw = 0; this.wind = this.c.wind.slice();
       this.pwm = new Array(this.M).fill(1000);
     }
@@ -93,9 +100,11 @@
     core(b) { return [...b.slice(0, 8), ...b.slice(10, 16), ...b.slice(17, 17 + this.M)]; }
     observe() {
       const b = this.base();
-      if (this.h1 === null) { this.h1 = this.core(b); this.h2 = this.h1.slice(); }
+      const capacity = HISTORY_FRAMES * this.histSpacing, n = this.past.length;
+      if (!n) { const now = this.core(b); for (let i = 0; i < capacity; i++) this.past.push(now); }
       this.lastBase = b;
-      return Float64Array.from([...b, ...this.h1, ...this.h2, Math.log10(this.mn) - 1]);
+      const len = this.past.length, h1 = this.past[len - this.histSpacing], h2 = this.past[len - 2 * this.histSpacing];
+      return Float64Array.from([...b, ...h1, ...h2, Math.log10(this.mn) - 1]);
     }
     physics(u, dt) {
       const M = this.M, k = Math.min(1, dt / this.tau);
@@ -132,10 +141,10 @@
     }
     step(action) {
       const M = this.M, a = Array.from(action, (x) => Math.max(-1, Math.min(1, x)));
-      if (this.lastBase) { this.h2 = this.h1; this.h1 = this.core(this.lastBase); }
+      if (this.lastBase) { this.past.push(this.core(this.lastBase)); if (this.past.length > HISTORY_FRAMES * this.histSpacing) this.past.shift(); }
       const u = a.map((x) => (1500 + 500 * x - 1000) / 1000);
       this.pwm = a.map((x) => 1500 + 500 * x);
-      for (let s = 0; s < 2; s++) this.physics(u, this.dt / 2);
+      for (let s = 0; s < this.substeps; s++) this.physics(u, this.dt / this.substeps);
       const L = this.Ls, rL = this.rL;
       const err = [this.target[0] - this.p[0], this.target[1] - this.p[1], this.target[2] - this.p[2]];
       const dist = norm(err) / L;
@@ -143,7 +152,7 @@
       if (norm(tv) > 5 * rL) tv = [0, 0, 0];
       this.prevTarget = this.target.slice();
       if (dist < I_ZONE && norm(this.v) / rL < I_SPEED && norm(tv) / rL < 0.05)
-        for (let i = 0; i < 3; i++) this.ierr[i] = Math.max(-I_CLAMP, Math.min(I_CLAMP, this.ierr[i] + err[i] / L * 0.01));
+        for (let i = 0; i < 3; i++) this.ierr[i] = Math.max(-I_CLAMP, Math.min(I_CLAMP, this.ierr[i] + err[i] / L * REFERENCE_PERIOD * this.stepLength));
       this.prevA = a;
     }
   }
@@ -167,7 +176,7 @@
       const P = this.P, d = P.SIM_WIND_DIR * Math.PI / 180, s = P.SIM_WIND_SPD;
       this.sim = new Sim({ frame: this.frame, mass: Math.max(0.2, Math.min(500, P.SIM_MASS)), tw: P.SIM_TW_RATIO, v0: P.SIM_BATT_VOLT,
                            noise: P.SIM_NOISE >= 0.5, errClip: P.NN_ERR_CLIP, alt0: P.HOME_ALT,
-                           wind: [-s * Math.cos(d), s * Math.sin(d), 0] });
+                           wind: [-s * Math.cos(d), s * Math.sin(d), 0], timing: this.weights.timing || FROUDE_SCALED_100_HZ });
       this.policy = new Policy(this.weights);
       this.dt = this.sim.dt; this.L = this.sim.Ls;
       this.armed = false; this.phase = "disarmed"; this.tPhase = this.t; this.carrot = [0, 0, 0]; this.yawT = 0;
