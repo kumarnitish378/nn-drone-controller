@@ -123,6 +123,12 @@ def build_web(args):
         print(path, size_kb, "kB")
 
 
+def export_cpp(args):
+    from nn_drone.export.cpp_library import export_cpp_models
+    for path in export_cpp_models():
+        print(path)
+
+
 def ground_link(args):
     from nn_drone.ground_link.runner import run_ground_link
     home = tuple(float(value) for value in args.home.split(","))
@@ -221,6 +227,9 @@ def build_parser():
 
     command = commands.add_parser("build-web", help="rebuild web/index.html and web/network.html from their sources and the shipped networks")
     command.set_defaults(handler=build_web)
+
+    command = commands.add_parser("export-cpp", help="regenerate the model headers of the C++ flight library in ardupilot/")
+    command.set_defaults(handler=export_cpp)
 
     command = commands.add_parser("ground-link", help="real-time simulator with a MAVLink link for a ground station")
     _weights_argument(command)

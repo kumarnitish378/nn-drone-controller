@@ -1,0 +1,39 @@
+/*
+  NN flight mode: the trained network flies the copter to a target that the pilot moves with the sticks
+  (like Loiter, but the network replaces the position, attitude and rate controllers and the mixer).
+  Copy to ArduCopter/mode_nn.h and include it at the end of ArduCopter/mode.h; see INTEGRATION_PROMPT.md.
+*/
+#pragma once
+
+#if MODE_NN_ENABLED
+
+class ModeNN : public Mode {
+public:
+    using Mode::Mode;
+    Number mode_number() const override { return Number::NN; }
+
+    bool init(bool ignore_checks) override;
+    void exit() override;
+    void run() override;
+
+    bool requires_GPS() const override { return true; }
+    bool has_manual_throttle() const override { return false; }
+    bool allows_arming(AP_Arming::Method method) const override { return true; }
+    bool is_autopilot() const override { return false; }
+    bool has_user_takeoff(bool must_navigate) const override { return false; }
+
+protected:
+    const char *name() const override { return "NN"; }
+    const char *name4() const override { return "NNCT"; }
+
+private:
+    void hold_target_here();
+    void move_target_with_sticks();
+    static Vector3f position_ned_m(const Vector3f &neu_cm);
+
+    Vector3f _target_ned_m;
+    float _target_yaw_rad;
+    bool _was_armed;
+};
+
+#endif  // MODE_NN_ENABLED

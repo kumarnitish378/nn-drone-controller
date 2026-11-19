@@ -231,6 +231,14 @@ same mission in both and checks the tracks agree (they do, to within 5 cm for a 
 95 kg hexacopter, with identical step counts). Rebuild the page with `python -m nn_drone build-web` after changing
 `web/core.js`, `web/template.html` or the weights.
 
+`ardupilot/` is the network as a C++ library for ArduPilot, for STM32H7 flight controllers: a portable core
+(no heap, no ArduPilot dependency) that builds the inputs, history and integral exactly as the simulator does,
+an `AP_NNControl` front end with `NN_*` parameters, a motors class that hands the PWM to the network, and an
+**NN** Copter flight mode. Options for the H7: CMSIS-DSP dense layers, a fast FPU tanh, the CORDIC co-processor
+(H72x/H73x) and DTCM weights. `tests/test_cpp_library.py` replays Python flights through it (motor commands
+agree to 2.4e-7). See [ardupilot/README.md](ardupilot/README.md) for how to add it to ArduPilot and what has not
+been checked yet (it has not been built in an ArduPilot tree or flown).
+
 `web/network.html` is the network lab: set every input by hand (attitude, rates, target, velocity, integral,
 previous outputs, earlier frames) and see each neuron's activation, the strongest input × weight paths, the motor
 commands and the thrust and torques they make, a sweep of any input, and which inputs move an output most.

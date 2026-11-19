@@ -1,0 +1,153 @@
+#include "Copter.h"
+
+#if MODE_NN_ENABLED
+
+/*
+  Every loop while armed: move the target with the sticks, run the network on the EKF state, hand its PWM
+  to the motors and tell the network what the motors really got (ArduPilot's PWM while spooling up).
+  To land, switch to LAND: ArduPilot's own controllers take over.
+*/
+
+namespace {
+
+const float STICK_DEADBAND = 0.1f;
+const float THROTTLE_STICK_CENTER = 500.0f;          // get_control_in() is 0..1000 for throttle
+const float YAW_RATE_FULL_STICK_RAD_S = radians(90.0f);
+const float CM_PER_M = 100.0f;
+const float TARGET_BELOW_VEHICLE_MAX = 1.0f;         // size-normalised metres
+
+float with_deadband(float stick)
+{
+    if (fabsf(stick) < STICK_DEADBAND) {
+        return 0.0f;
+    }
+    return (stick - copysignf(STICK_DEADBAND, stick)) / (1.0f - STICK_DEADBAND);
+}
+
+float yaw_of(const Matrix3f &body_to_ned)
+{
+    float roll, pitch, yaw;
+    body_to_ned.to_euler(&roll, &pitch, &yaw);
+    return yaw;
+}
+
+}  // namespace
+
+Vector3f ModeNN::position_ned_m(const Vector3f &neu_cm)
+{
+    return Vector3f(neu_cm.x / CM_PER_M, neu_cm.y / CM_PER_M, -neu_cm.z / CM_PER_M);
+}
+
+bool ModeNN::init(bool ignore_checks)
+{
+    AP_NNControl &network = g2.nn_control;
+    if (copter.motors_nn == nullptr || !network.enabled() || !copter.position_ok()) {
+        return false;
+    }
+    if (!copter.motors_nn->network_pwm_range_ok()) {
+        gcs().send_text(MAV_SEVERITY_WARNING, "NN: set MOT_PWM_MIN 1000 and MOT_PWM_MAX 2000");
+        return false;
+    }
+    if (!network.init(uint8_t(__builtin_popcount(motors->get_motor_mask())))) {
+        gcs().send_text(MAV_SEVERITY_WARNING, "NN: no network for this frame, or SCHED_LOOP_RATE is not 400");
+        return false;
+    }
+    hold_target_here();
+    _was_armed = motors->armed();
+    if (_was_armed) {
+        // Entering in flight: the network starts from the motors' current PWM.
+        uint16_t pwm = AP_NNControl::PWM_STOPPED_US;
+        copter.motors_nn->get_motor_pwm(0, pwm);
+        network.reset(pwm);
+    }
+    return true;
+}
+
+void ModeNN::exit()
+{
+    copter.motors_nn->release_network();
+}
+
+void ModeNN::hold_target_here()
+{
+    _target_ned_m = position_ned_m(inertial_nav.get_position_neu_cm());
+    _target_yaw_rad = yaw_of(ahrs.get_rotation_body_to_ned());
+}
+
+void ModeNN::move_target_with_sticks()
+{
+    const float forward = -with_deadband(channel_pitch->norm_input_dz());   // stick forward = negative pitch input
+    const float right = with_deadband(channel_roll->norm_input_dz());
+    const float climb = with_deadband((channel_throttle->get_control_in() - THROTTLE_STICK_CENTER) / THROTTLE_STICK_CENTER);
+    const float yaw_rate = with_deadband(channel_yaw->norm_input_dz()) * YAW_RATE_FULL_STICK_RAD_S;
+
+    const float horizontal_speed = wp_nav->get_default_speed_xy() / CM_PER_M;
+    const float vertical_speed = (climb > 0.0f ? wp_nav->get_default_speed_up() : fabsf(wp_nav->get_default_speed_down())) / CM_PER_M;
+    const float cos_yaw = cosf(_target_yaw_rad), sin_yaw = sinf(_target_yaw_rad);
+    _target_ned_m.x += (forward * cos_yaw - right * sin_yaw) * horizontal_speed * G_Dt;
+    _target_ned_m.y += (forward * sin_yaw + right * cos_yaw) * horizontal_speed * G_Dt;
+    _target_ned_m.z -= climb * vertical_speed * G_Dt;
+    _target_yaw_rad = wrap_PI(_target_yaw_rad + yaw_rate * G_Dt);
+
+    // Keep the target near the vehicle so letting go of the sticks stops it close by.
+    AP_NNControl &network = g2.nn_control;
+    const float length_scale = cbrtf(network.nominal_mass_kg());
+    const Vector3f position = position_ned_m(inertial_nav.get_position_neu_cm());
+    Vector2f offset(_target_ned_m.x - position.x, _target_ned_m.y - position.y);
+    offset.limit_length(network.error_clip() * length_scale);
+    _target_ned_m.x = position.x + offset.x;
+    _target_ned_m.y = position.y + offset.y;
+    _target_ned_m.z = MIN(_target_ned_m.z, position.z + TARGET_BELOW_VEHICLE_MAX * length_scale);
+}
+
+void ModeNN::run()
+{
+    AP_NNControl &network = g2.nn_control;
+    AP_MotorsMatrix_NN &nn_motors = *copter.motors_nn;
+    if (!motors->armed()) {
+        _was_armed = false;
+        nn_motors.release_network();
+        motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::SHUT_DOWN);
+        hold_target_here();
+        return;
+    }
+    if (!_was_armed) {
+        network.reset(AP_NNControl::PWM_STOPPED_US);
+        hold_target_here();
+        _was_armed = true;
+    }
+    motors->set_desired_spool_state(AP_Motors::DesiredSpoolState::THROTTLE_UNLIMITED);
+    move_target_with_sticks();
+
+    uint16_t pwm[NN_MAX_MOTORS];
+    const Vector3f position = position_ned_m(inertial_nav.get_position_neu_cm());
+    const Vector3f velocity = position_ned_m(inertial_nav.get_velocity_neu_cms());
+    if (!network.update(_target_ned_m, _target_yaw_rad, position, velocity, pwm)) {
+        copter.set_mode(Mode::Number::LAND, ModeReason::UNKNOWN);
+        return;
+    }
+    nn_motors.set_network_pwm(pwm, network.motor_count());
+
+    // What the motors get from this loop: the network's PWM at full authority, ArduPilot's while spooling.
+    uint16_t applied[NN_MAX_MOTORS];
+    float mean_throttle = 0.0f;
+    const bool network_flies = motors->get_spool_state() == AP_Motors::SpoolState::THROTTLE_UNLIMITED;
+    for (uint8_t motor = 0; motor < network.motor_count(); motor++) {
+        applied[motor] = pwm[motor];
+        if (!network_flies && !nn_motors.get_motor_pwm(motor, applied[motor])) {
+            applied[motor] = AP_NNControl::PWM_STOPPED_US;
+        }
+        const float throttle = (applied[motor] - AP_MotorsMatrix_NN::NETWORK_PWM_MIN) /
+                               float(AP_MotorsMatrix_NN::NETWORK_PWM_MAX - AP_MotorsMatrix_NN::NETWORK_PWM_MIN);
+        mean_throttle += throttle * throttle / network.motor_count();   // thrust ~ throttle^2
+    }
+    network.commit(applied);
+
+    // Keep ArduPilot's controllers on the vehicle's actual state, so leaving the mode is smooth, and give the
+    // land detector the real thrust.
+    attitude_control->reset_target_and_rate();
+    attitude_control->reset_rate_controller_I_terms();
+    attitude_control->set_throttle_out(mean_throttle, false, g.throttle_filt);
+}
+
+#endif  // MODE_NN_ENABLED
