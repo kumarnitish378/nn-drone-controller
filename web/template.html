@@ -20,6 +20,7 @@
   --sky: #dfe9ee;
   --ground: #d9e0d2;
   --good: #1f7a3f; --warn: #a85f00; --bad: #b3261e;
+  --negative: #2f6fbf; --positive: #d2691e; --neutral: #e3e8e4;   /* neuron activation scale */
   --display: "Saira Condensed", "Arial Narrow", sans-serif;
   --body: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
@@ -29,12 +30,14 @@
     --paper: #0e1a22; --panel: #15252f; --ink: #e6eef0; --ink-2: #9db0b8; --rule: #2b414d;
     --route: #f06bb4; --flown: #5fb4f2; --sky: #0b151c; --ground: #16262b;
     --good: #5fd08a; --warn: #f0b04a; --bad: #ff8a80; color-scheme: dark;
+    --negative: #6aa8f0; --positive: #f2a05a; --neutral: #22343f;
   }
 }
 :root[data-theme="dark"] {
   --paper: #0e1a22; --panel: #15252f; --ink: #e6eef0; --ink-2: #9db0b8; --rule: #2b414d;
   --route: #f06bb4; --flown: #5fb4f2; --sky: #0b151c; --ground: #16262b;
   --good: #5fd08a; --warn: #f0b04a; --bad: #ff8a80; color-scheme: dark;
+    --negative: #6aa8f0; --positive: #f2a05a; --neutral: #22343f;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; }
@@ -97,6 +100,14 @@ input[type="number"], select { width: 100%; padding: 7px 8px; background: var(--
 .res b { font: 500 16px/1.3 var(--mono); display: block; }
 .legend { display: flex; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); margin-top: 6px; }
 .legend i { display: inline-block; width: 14px; height: 3px; vertical-align: middle; margin-right: 5px; background: var(--c); }
+.net-view { position: relative; }
+#net { width: 100%; height: 256px; display: block; touch-action: manipulation; }
+#raster { width: 100%; height: 150px; display: block; }
+.net-tip { position: absolute; pointer-events: none; background: var(--panel); border: 1.5px solid var(--ink); padding: 5px 8px; font: 500 12px/1.35 var(--mono); white-space: nowrap; display: none; z-index: 2; }
+.net-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 12px 0 6px; }
+.net-head select { width: auto; }
+.scale { display: inline-block; width: 90px; height: 8px; border: 1px solid var(--rule); vertical-align: middle; margin: 0 5px; background: linear-gradient(90deg, var(--negative), var(--neutral), var(--positive)); }
+#netState[data-s="fly"] { color: var(--good); }
 @media (prefers-reduced-motion: reduce) { * { scroll-behavior: auto; } }
 </style>
 </head>
@@ -138,6 +149,22 @@ input[type="number"], select { width: 100%; padding: 7px 8px; background: var(--
         <h2>Motor PWM <span id="clock">t = 0.0 s</span></h2>
         <div class="motors" id="motors"></div>
         <canvas id="chart"></canvas>
+      </section>
+      <section>
+        <h2>Network, live <span id="netState">not flying</span></h2>
+        <div class="net-view">
+          <canvas id="net" aria-label="The flight network right now: inputs, two hidden layers of 64 neurons and one output per motor"></canvas>
+          <div class="net-tip" id="netTip"></div>
+        </div>
+        <div class="legend"><span>negative<span class="scale"></span>positive</span><span>Lines: the strongest input × weight paths</span></div>
+        <div class="net-head">
+          <span class="lab">Activity over time</span>
+          <select id="rasterLayer" aria-label="Layer shown over time">
+            <option value="0">Inputs</option><option value="1">Hidden 1</option><option value="2" selected>Hidden 2</option><option value="3">Motors</option>
+          </select>
+        </div>
+        <canvas id="raster" aria-label="Activations of the chosen layer over time, one row per neuron"></canvas>
+        <p class="note">Hover over a neuron (tap on a touch screen) to see its value and only its connections. Pause to study one moment. The network runs all the time, but it only controls the motors once the drone has spooled up.</p>
       </section>
     </div>
 
@@ -205,6 +232,9 @@ input[type="number"], select { width: 100%; padding: 7px 8px; background: var(--
 /*__CORE__*/
 </script>
 <script>
+/*__LAB_CORE__*/
+</script>
+<script>
 const WEIGHTS = { quad_x: /*__WQ__*/, hex_x: /*__WH__*/ };
 </script>
 <script>
@@ -251,9 +281,10 @@ function autoSpeeds() {
 function build() {
   if (S.cfg.auto) autoSpeeds();
   veh = new Vehicle(S.frame, WEIGHTS[S.frame], params(), (t, s) => { logLines.unshift([t, s]); if (logLines.length > 60) logLines.pop(); drawLog(); });
-  track = []; maxTilt = 0; maxPwm = 0; hist = []; lastHist = -1; logLines = []; S.paused = false;
+  track = []; maxTilt = 0; maxPwm = 0; hist = []; lastHist = -1; netSamples = []; netHover = null; logLines = []; S.paused = false;
   drawLog(); drawMotors(true); syncInputs(); drawPlan(); drawResult(); scene.resetTrack(); scene.setDrone(S.frame, veh.L);
   if (!S.follow) scene.fit(planPoints());
+  drawNetwork(); drawRaster();
 }
 
 // ---------------------------------------------------------------- planned route geometry (n, e, alt)
@@ -462,6 +493,156 @@ function drawStatus(tm) {
   $("btnRtl").disabled = $("btnLand").disabled = veh.phase !== "fly";
 }
 
+// ---------------------------------------------------------------- live network view
+const NET_EDGE_LIMIT = 120, NET_SAMPLE_LIMIT = 600, NET_HIT_RADIUS_PX = 11, NET_TIP_OFFSET_PX = 12, PALETTE_STEPS = 256;
+const NET_ROWS_Y = [40, 108, 176, 222], NET_LABEL_WIDTH_PX = 62, NET_RIGHT_PAD_PX = 10, NET_MAX_OUTPUT_SPACING_PX = 80;
+const NET_NODE_RADIUS = [2.6, 2.4, 2.4, 9], NET_LAYER_NAMES = ["Inputs", "Hidden 1", "Hidden 2", "Motors"];
+const RASTER_AXIS_HEIGHT_PX = 16, PWM_CENTER = 1500, PWM_HALF_RANGE = 500;
+const netCanvas = $("net"), netTip = $("netTip"), rasterCanvas = $("raster"), rasterImageCanvas = document.createElement("canvas");
+let netSamples = [], netNodes = [], netHover = null, netColors = null, netPalette = null;
+
+function hexToRgb(hex) { const value = parseInt(hex.slice(1), 16); return [(value >> 16) & 255, (value >> 8) & 255, value & 255]; }
+function readNetColors() {
+  const style = getComputedStyle(document.documentElement);
+  netColors = Object.fromEntries(["ink", "ink-2", "rule", "negative", "positive", "neutral"].map((name) => [name, style.getPropertyValue("--" + name).trim()]));
+  const neutral = hexToRgb(netColors.neutral), negative = hexToRgb(netColors.negative), positive = hexToRgb(netColors.positive);
+  netPalette = Array.from({ length: PALETTE_STEPS }, (_, index) => {
+    const value = index / (PALETTE_STEPS - 1) * 2 - 1, toward = value < 0 ? negative : positive;
+    return neutral.map((channel, part) => Math.round(channel + (toward[part] - channel) * Math.abs(value)));
+  });
+}
+const paletteIndex = (value) => Math.round((Math.max(-1, Math.min(1, value)) + 1) / 2 * (PALETTE_STEPS - 1));
+const activationColor = (value) => `rgb(${netPalette[paletteIndex(value)].join(",")})`;
+const outputPwm = (value) => PWM_CENTER + PWM_HALF_RANGE * Math.max(-1, Math.min(1, value));
+if (window.matchMedia) window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => { netColors = null; drawNetwork(); drawRaster(); });
+
+function prepareCanvas(canvas) {
+  const ratio = Math.min(window.devicePixelRatio || 1, 2), width = canvas.clientWidth, height = canvas.clientHeight;
+  if (canvas.width !== Math.round(width * ratio) || canvas.height !== Math.round(height * ratio)) { canvas.width = Math.round(width * ratio); canvas.height = Math.round(height * ratio); }
+  const context = canvas.getContext("2d"); context.setTransform(ratio, 0, 0, ratio, 0, 0); context.clearRect(0, 0, width, height);
+  if (!netColors) readNetColors();
+  return { context, width, height };
+}
+function placeholder(context, width, height, text) {
+  context.fillStyle = netColors["ink-2"]; context.font = "13px " + getComputedStyle(document.body).fontFamily;
+  context.textAlign = "center"; context.textBaseline = "middle"; context.fillText(text, width / 2, height / 2);
+}
+
+/* Input names, and which input frame each one belongs to (now, one or two history frames back, mass). */
+function inputBands(motorCount) {
+  const layout = NetworkLab.inputLayout(motorCount), historyMs = Math.round(veh.sim.histSpacing * veh.dt * 1000);
+  const bandOf = (entry) => entry.group.startsWith("h1 ") ? `${historyMs} ms ago` : entry.group.startsWith("h2 ") ? `${2 * historyMs} ms ago` : entry.group === "mass" ? "mass" : "now";
+  return layout.map((entry) => ({ name: entry.name, band: bandOf(entry) }));
+}
+function layoutNetwork(width, sizes) {
+  const usable = width - NET_LABEL_WIDTH_PX - NET_RIGHT_PAD_PX, last = sizes.length - 1;
+  return sizes.map((size, layer) => {
+    const spacing = layer === last ? Math.min(NET_MAX_OUTPUT_SPACING_PX, usable / size) : usable / size;
+    const start = NET_LABEL_WIDTH_PX + (usable - spacing * size) / 2;
+    return Array.from({ length: size }, (_, index) => ({ x: start + spacing * (index + 0.5), y: NET_ROWS_Y[layer], layer, index }));
+  });
+}
+function strongestEdges(activations) {
+  const edges = [];
+  veh.policy.L.forEach((weights, layer) => {
+    const incoming = activations[layer];
+    for (let from = 0; from < weights.nin; from++) {
+      if (incoming[from] === 0) continue;
+      for (let to = 0; to < weights.nout; to++) edges.push({ layer, from, to, contribution: incoming[from] * weights.W[from * weights.nout + to] });
+    }
+  });
+  if (netHover) return edges.filter((edge) => (edge.layer === netHover.layer && edge.from === netHover.index) || (edge.layer + 1 === netHover.layer && edge.to === netHover.index));
+  edges.sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution));
+  return edges.slice(0, NET_EDGE_LIMIT);
+}
+function drawNetwork() {
+  const { context, width, height } = prepareCanvas(netCanvas), activations = veh.policy.activations;
+  const state = $("netState"), inControl = veh.phase === "fly";
+  state.dataset.s = inControl ? "fly" : "off";
+  state.textContent = !activations ? "not flying" : !veh.armed ? "flight over, last moment shown" : inControl ? "in control of the motors" : `running, not in control (${veh.phase})`;
+  if (!activations) { netNodes = []; placeholder(context, width, height, "Arm and fly to watch the network work"); return; }
+  netNodes = layoutNetwork(width, activations.map((layer) => layer.length));
+  const edges = strongestEdges(activations), strongest = Math.max(1e-9, ...edges.map((edge) => Math.abs(edge.contribution)));
+  for (const edge of edges.reverse()) {
+    const from = netNodes[edge.layer][edge.from], to = netNodes[edge.layer + 1][edge.to], strength = Math.abs(edge.contribution) / strongest;
+    context.strokeStyle = edge.contribution < 0 ? netColors.negative : netColors.positive;
+    context.globalAlpha = 0.08 + 0.8 * strength; context.lineWidth = 0.5 + 2 * strength;
+    context.beginPath(); context.moveTo(from.x, from.y); context.lineTo(to.x, to.y); context.stroke();
+  }
+  context.globalAlpha = 1;
+  const last = netNodes.length - 1;
+  netNodes.forEach((row, layer) => row.forEach((node) => {
+    const isHovered = netHover && netHover.layer === layer && netHover.index === node.index;
+    context.beginPath(); context.arc(node.x, node.y, NET_NODE_RADIUS[layer] + (isHovered ? 2 : 0), 0, 2 * Math.PI);
+    context.fillStyle = activationColor(activations[layer][node.index]); context.fill();
+    context.strokeStyle = isHovered ? netColors.ink : netColors["ink-2"]; context.lineWidth = isHovered ? 2 : layer === last ? 1 : 0.4; context.stroke();
+  }));
+  const labelFont = "600 11px " + getComputedStyle(document.documentElement).getPropertyValue("--display");
+  context.font = labelFont; context.fillStyle = netColors["ink-2"]; context.textBaseline = "middle"; context.textAlign = "left";
+  NET_LAYER_NAMES.forEach((name, layer) => context.fillText(name.toUpperCase(), 4, NET_ROWS_Y[layer]));
+  drawInputBands(context, inputBands(veh.sim.M));
+  context.font = "500 12px " + getComputedStyle(document.documentElement).getPropertyValue("--mono"); context.fillStyle = netColors.ink; context.textAlign = "center";
+  netNodes[last].forEach((node) => context.fillText(`M${node.index + 1} ${Math.round(outputPwm(activations[last][node.index]))}`, node.x, NET_ROWS_Y[last] + 22));
+  showNetTip(activations);
+}
+function drawInputBands(context, bands) {
+  const inputs = netNodes[0], bandTop = NET_ROWS_Y[0] - 16;
+  let start = 0;
+  context.strokeStyle = netColors.rule; context.lineWidth = 1; context.textAlign = "center";
+  for (let index = 1; index <= bands.length; index++) {
+    if (index < bands.length && bands[index].band === bands[start].band) continue;
+    const left = inputs[start].x - 2, right = inputs[index - 1].x + 2, label = bands[start].band;
+    context.beginPath(); context.moveTo(left, bandTop + 6); context.lineTo(left, bandTop); context.lineTo(right, bandTop); context.lineTo(right, bandTop + 6); context.stroke();
+    if (context.measureText(label).width < right - left + 4) context.fillText(label, (left + right) / 2, bandTop - 8);
+    start = index;
+  }
+}
+function showNetTip(activations) {
+  if (!netHover || !netNodes.length) { netTip.style.display = "none"; return; }
+  const node = netNodes[netHover.layer][netHover.index], value = activations[netHover.layer][netHover.index], last = netNodes.length - 1;
+  if (netHover.layer === 0) { const entry = inputBands(veh.sim.M)[netHover.index]; netTip.innerHTML = `${entry.name} (${entry.band})<br>input ${value.toFixed(3)}`; }
+  else if (netHover.layer === last) netTip.innerHTML = `motor ${netHover.index + 1}<br>output ${value.toFixed(3)} = ${outputPwm(value).toFixed(0)} µs`;
+  else netTip.innerHTML = `hidden ${netHover.layer} · neuron ${netHover.index + 1}<br>activation ${value.toFixed(3)}`;
+  netTip.style.display = "block";
+  netTip.style.left = `${Math.max(0, Math.min(node.x + NET_TIP_OFFSET_PX, netCanvas.clientWidth - netTip.offsetWidth - 2))}px`;
+  netTip.style.top = `${node.y + NET_TIP_OFFSET_PX}px`;
+}
+function nearestNode(event) {
+  const bounds = netCanvas.getBoundingClientRect(), x = event.clientX - bounds.left, y = event.clientY - bounds.top;
+  let best = null, bestDistance = NET_HIT_RADIUS_PX;
+  for (const row of netNodes) for (const node of row) { const distance = Math.hypot(node.x - x, node.y - y); if (distance < bestDistance) { best = node; bestDistance = distance; } }
+  return best;
+}
+const sameNode = (a, b) => a && b && a.layer === b.layer && a.index === b.index;
+function setNetHover(node) { if (sameNode(node, netHover) || (!node && !netHover)) return; netHover = node; drawNetwork(); }
+netCanvas.addEventListener("pointermove", (event) => { if (event.pointerType === "mouse") setNetHover(nearestNode(event)); });
+netCanvas.addEventListener("pointerleave", (event) => { if (event.pointerType === "mouse") setNetHover(null); });
+netCanvas.addEventListener("pointerdown", (event) => { if (event.pointerType === "mouse") return; const node = nearestNode(event); setNetHover(sameNode(node, netHover) ? null : node); });
+
+function recordNetworkSample() {
+  const activations = veh.policy.activations; if (!activations) return;
+  netSamples.push({ t: veh.t, layers: activations.map((layer) => Float32Array.from(layer)) });
+  if (netSamples.length > NET_SAMPLE_LIMIT) netSamples.shift();
+}
+function drawRaster() {
+  const { context, width, height } = prepareCanvas(rasterCanvas), layer = +$("rasterLayer").value;
+  if (netSamples.length < 2) { placeholder(context, width, height, "Fills in as the drone flies"); return; }
+  const rows = netSamples[0].layers[layer].length, columns = netSamples.length, image = new ImageData(columns, rows);
+  netSamples.forEach((sample, column) => sample.layers[layer].forEach((value, row) => {
+    const offset = (row * columns + column) * 4; image.data.set(netPalette[paletteIndex(value)], offset); image.data[offset + 3] = 255;
+  }));
+  rasterImageCanvas.width = columns; rasterImageCanvas.height = rows; rasterImageCanvas.getContext("2d").putImageData(image, 0, 0);
+  const plotHeight = height - RASTER_AXIS_HEIGHT_PX;
+  context.imageSmoothingEnabled = false; context.drawImage(rasterImageCanvas, NET_LABEL_WIDTH_PX, 0, width - NET_LABEL_WIDTH_PX, plotHeight);
+  context.strokeStyle = netColors.rule; context.strokeRect(NET_LABEL_WIDTH_PX + 0.5, 0.5, width - NET_LABEL_WIDTH_PX - 1, plotHeight - 1);
+  context.font = "11px " + getComputedStyle(document.documentElement).getPropertyValue("--mono"); context.fillStyle = netColors["ink-2"];
+  context.textAlign = "right"; context.textBaseline = "top"; context.fillText(layer === 3 ? "M1" : "1", NET_LABEL_WIDTH_PX - 5, 1);
+  context.textBaseline = "bottom"; context.fillText(layer === 3 ? `M${rows}` : String(rows), NET_LABEL_WIDTH_PX - 5, plotHeight);
+  context.textBaseline = "alphabetic"; context.textAlign = "left"; context.fillText(netSamples[0].t.toFixed(0) + " s", NET_LABEL_WIDTH_PX, height - 3);
+  context.textAlign = "right"; context.fillText(netSamples[columns - 1].t.toFixed(0) + " s", width, height - 3);
+}
+$("rasterLayer").onchange = drawRaster;
+
 // ---------------------------------------------------------------- main loop
 let lastReal = performance.now(), acc = 0, wasArmed = false, lastSeq = -2, lastReached = -1, uiTick = 0;
 function frame(now) {
@@ -473,18 +654,19 @@ function frame(now) {
       const tilt = Math.acos(Math.max(-1, Math.min(1, 1 - 2 * (s.q[1] * s.q[1] + s.q[2] * s.q[2])))) * 180 / Math.PI;
       if (veh.phase === "fly") { if (tilt > maxTilt) maxTilt = tilt; for (const p of veh.pwm) if (p > maxPwm) maxPwm = p; }
       const k = Math.floor(veh.t / 0.1);
-      if (k !== lastHist) { lastHist = k; hist.push([veh.t, ...veh.pwm]); if (hist.length > 600) hist.shift(); if (!s.onGround) scene.addTrack(s.p[0], -s.p[1], s.p[2]); }
+      if (k !== lastHist) { lastHist = k; hist.push([veh.t, ...veh.pwm]); recordNetworkSample(); if (hist.length > 600) hist.shift(); if (!s.onGround) scene.addTrack(s.p[0], -s.p[1], s.p[2]); }
     }
   }
   const tm = veh.telemetry(); scene.update(tm); drawStatus(tm); drawMotors();
-  if (++uiTick % 6 === 0) { drawChart(); drawResult(); }
-  if (veh.armed !== wasArmed || veh.seq !== lastSeq || veh.reached.length !== lastReached) { wasArmed = veh.armed; lastSeq = veh.seq; lastReached = veh.reached.length; drawPlan(); syncInputs(); }
+  if (++uiTick % 3 === 0 && veh.armed && !S.paused) drawNetwork();
+  if (uiTick % 6 === 0) { drawChart(); drawResult(); if (veh.armed) drawRaster(); }
+  if (veh.armed !== wasArmed || veh.seq !== lastSeq || veh.reached.length !== lastReached) { wasArmed = veh.armed; lastSeq = veh.seq; lastReached = veh.reached.length; drawPlan(); syncInputs(); drawNetwork(); drawRaster(); }
   requestAnimationFrame(frame);
 }
 
 // ---------------------------------------------------------------- events
 $("btnFly").onclick = () => { if (veh.done || veh.crashed) build(); tStart = veh.t; veh.P = Object.assign(veh.P, params()); if (veh.start(S.mission.map((m) => Object.assign({}, m)))) { acc = 0; S.paused = false; } };
-$("btnPause").onclick = () => { S.paused = !S.paused; };
+$("btnPause").onclick = () => { S.paused = !S.paused; drawNetwork(); };
 $("btnRtl").onclick = () => veh.command("rtl");
 $("btnLand").onclick = () => veh.command("land");
 $("btnReset").onclick = () => build();

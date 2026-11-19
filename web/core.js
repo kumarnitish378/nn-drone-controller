@@ -38,15 +38,15 @@
         return { W: flat, b: Float64Array.from(b), nin, nout };
       });
     }
-    forward(x) {
-      let h = x;
+    forward(x) {                   // keeps every layer's activations in this.activations for the live view
+      let h = x; this.activations = [x];
       for (const { W, b, nin, nout } of this.L) {
         const o = new Float64Array(nout);
         for (let j = 0; j < nout; j++) o[j] = b[j];
         const n = Math.min(nin, h.length);       // missing trailing inputs have zero weight
         for (let i = 0; i < n; i++) { const hi = h[i]; if (hi !== 0) { const r = i * nout; for (let j = 0; j < nout; j++) o[j] += hi * W[r + j]; } }
         for (let j = 0; j < nout; j++) o[j] = Math.tanh(o[j]);
-        h = o;
+        h = o; this.activations.push(o);
       }
       return h;
     }

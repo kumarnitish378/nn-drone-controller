@@ -117,9 +117,10 @@ def export_model(args):
 
 
 def build_web(args):
-    from nn_drone.export.web_page import build_web_page
-    path, size_kb = build_web_page()
-    print(path, size_kb, "kB")
+    from nn_drone.export.web_page import build_network_page, build_web_page
+    for build in (build_web_page, build_network_page):
+        path, size_kb = build()
+        print(path, size_kb, "kB")
 
 
 def ground_link(args):
@@ -218,7 +219,7 @@ def build_parser():
     command.add_argument("--test-report", type=Path, help="CI report to include in the model card")
     command.set_defaults(handler=export_model)
 
-    command = commands.add_parser("build-web", help="rebuild web/index.html from its sources and the shipped networks")
+    command = commands.add_parser("build-web", help="rebuild web/index.html and web/network.html from their sources and the shipped networks")
     command.set_defaults(handler=build_web)
 
     command = commands.add_parser("ground-link", help="real-time simulator with a MAVLink link for a ground station")

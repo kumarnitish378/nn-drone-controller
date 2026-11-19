@@ -223,11 +223,20 @@ simulator and both networks run inside the browser, so it needs no Python: open 
 - Plan: take-off, waypoints, circles, return to launch and land, with a few ready-made plans.
 - Drone: quad or hexa, mass 0.5-100 kg, thrust-to-weight, battery, wind, field elevation, sensor noise, speeds.
 - Watch: the planned route and flown track in 3D, per-motor PWM bars and chart, and a flight record.
+- See the network fly: every neuron's activation and the strongest input × weight paths, live, and each layer's
+  activity over the last minute of flight. Pause and hover (or tap) a neuron to inspect one moment.
 
 `web/core.js` is a port of the simulator and of the ground-link flight logic; `tests/test_web_core.py` flies the
 same mission in both and checks the tracks agree (they do, to within 5 cm for a 4 kg quad and 12 cm for a
 95 kg hexacopter, with identical step counts). Rebuild the page with `python -m nn_drone build-web` after changing
 `web/core.js`, `web/template.html` or the weights.
+
+`web/network.html` is the network lab: set every input by hand (attitude, rates, target, velocity, integral,
+previous outputs, earlier frames) and see each neuron's activation, the strongest input × weight paths, the motor
+commands and the thrust and torques they make, a sweep of any input, and which inputs move an output most.
+Its input builder (`web/network_core.js`) is checked against the simulator in `tests/test_network_lab.py`.
+To open it on another device: `python -m http.server 8765 --bind 0.0.0.0` in `web/`, then
+`http://<this computer's address>:8765/network.html`.
 
 ## Running
 
